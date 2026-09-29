@@ -3,12 +3,16 @@ import { motion } from "framer-motion";
 import {
   BoxSelect,
   Check,
+  Grid2x2,
   Layers,
   Loader2,
   LogOut,
   Pencil,
   PlugZap,
   RotateCcw,
+  ScanEye,
+  Sun,
+  ThermometerSun,
   Trash2,
   Undo2,
   X,
@@ -65,7 +69,11 @@ import {
   summariseUsage,
   type Appliance,
 } from "@/lib/appliances";
-import { RoofScene, type SceneMode } from "@/components/planner/RoofScene";
+import {
+  RoofScene,
+  type SceneMode,
+  type SceneView,
+} from "@/components/planner/RoofScene";
 import {
   SavedDesigns,
   type SavedDesign,
@@ -108,7 +116,10 @@ export default function Dashboard() {
   const [drawPoints, setDrawPoints] = useState<Point2[]>([]);
   const [hoveredPanel, setHoveredPanel] = useState<string | null>(null);
   const [showSun, setShowSun] = useState(true);
-  const [showHeatmap, setShowHeatmap] = useState(true);
+  // Off by default: the first thing a homeowner should see is what the roof will
+  // actually look like, not an analytic colour ramp.
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [view, setView] = useState<SceneView>("perspective");
 
   const site = useMemo(
     () => SITE_PRESETS.find((preset) => preset.id === siteId) ?? SITE_PRESETS[0],
@@ -327,6 +338,59 @@ export default function Dashboard() {
   }, [isPlaying]);
 
   /* ------------------------------------------------------------ *
+   * Keyboard shortcuts
+   * ------------------------------------------------------------ */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      // Never hijack a key while the user is typing, or while a button holds
+      // focus — otherwise space would re-trigger the last button clicked.
+      if (
+        target &&
+        (target.isContentEditable ||
+          target.getAttribute("role") === "button" ||
+          ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName))
+      ) {
+        return;
+      }
+
+      const scrub = (delta: number) => {
+        event.preventDefault();
+        setIsPlaying(false);
+        setMinutes((current) => (current + delta + 1440) % 1440);
+      };
+
+      switch (event.key) {
+        case " ":
+          event.preventDefault();
+          setIsPlaying((value) => !value);
+          break;
+        case "ArrowLeft":
+          scrub(event.shiftKey ? -60 : -15);
+          break;
+        case "ArrowRight":
+          scrub(event.shiftKey ? 60 : 15);
+          break;
+        case "1":
+          setView("perspective");
+          break;
+        case "2":
+          setView("top");
+          break;
+        case "3":
+          setView("sun");
+          break;
+        case "h":
+        case "H":
+          setShowHeatmap((value) => !value);
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  /* ------------------------------------------------------------ *
    * Drawing
    * ------------------------------------------------------------ */
   const addDrawPoint = useCallback((point: Point2) => {
@@ -466,9 +530,9 @@ export default function Dashboard() {
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       {/* Header */}
-      <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-card/70 px-4 backdrop-blur">
+      <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-card/70 px-4 backdrop-blur">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/12 text-primary">
+          <span className="relative grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm">
             <BoxSelect className="size-4" />
           </span>
           <div className="min-w-0">
@@ -480,6 +544,30 @@ export default function Dashboard() {
               {Math.round(azimuth)}° facing
             </p>
           </div>
+        </div>
+
+        {/* Headline numbers, so the answer is legible before you touch anything */}
+        <div className="hidden items-center gap-1 rounded-xl border border-border bg-background/60 p-1 xl:flex">
+          {[
+            [`${(capacityW / 1000).toFixed(2)}`, "kWp installed"],
+            [Math.round(energy.annualKwh).toLocaleString(), "kWh per year"],
+            [energy.specificYield.toFixed(0), "kWh per kWp"],
+            [
+              usage.annualKwh > 0
+                ? `${Math.min(100, Math.round((energy.annualKwh / usage.annualKwh) * 100))}%`
+                : "—",
+              "of your usage",
+            ],
+          ].map(([value, label]) => (
+            <div key={label} className="px-3 py-1 text-center">
+              <p className="numeric text-sm leading-tight font-semibold tabular-nums">
+                {value}
+              </p>
+              <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                {label}
+              </p>
+            </div>
+          ))}
         </div>
 
         <div className="flex items-center gap-2">
@@ -585,6 +673,8 @@ export default function Dashboard() {
             onShowSunChange={setShowSun}
             showHeatmap={showHeatmap}
             onShowHeatmapChange={setShowHeatmap}
+            capacityKw={capacityW / 1000}
+            annualKwh={energy.annualKwh}
           />
         </aside>
 
@@ -610,6 +700,7 @@ export default function Dashboard() {
               onPickObstacle={addObstacle}
               showSun={showSun}
               showHeatmap={showHeatmap}
+              view={view}
             />
 
             {/* Drawing toolbar */}
@@ -708,6 +799,48 @@ export default function Dashboard() {
               )}
             </div>
 
+            {/* View presets */}
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="pointer-events-auto absolute bottom-4 left-4 flex flex-col gap-2"
+            >
+              <div className="flex items-center gap-1 rounded-full border border-border bg-card/85 p-1 shadow-sm backdrop-blur">
+                {([
+                  ["perspective", "Roof", ScanEye],
+                  ["top", "Plan", Grid2x2],
+                  ["sun", "Sun's eye", Sun],
+                ] as [SceneView, string, typeof Sun][]).map(([id, label, Icon]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setView(id)}
+                    className={`flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      view === id
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="size-3.5" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowHeatmap((value) => !value)}
+                className={`flex cursor-pointer items-center gap-2 self-start rounded-full border border-border px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur transition-colors ${
+                  showHeatmap
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card/85 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <ThermometerSun className="size-3.5" />
+                {showHeatmap ? "Yield heat map" : "Realistic view"}
+              </button>
+            </motion.div>
+
             {/* Live readout */}
             <div className="pointer-events-none absolute right-4 bottom-4 flex items-center gap-2">
               <div className="rounded-xl border border-border bg-card/90 px-3 py-2 text-right shadow-sm backdrop-blur">
@@ -718,6 +851,9 @@ export default function Dashboard() {
                   {sun.altitude > 0
                     ? `${sun.altitude.toFixed(1)}° above horizon`
                     : "Sun below horizon"}
+                </p>
+                <p className="hidden text-[10px] text-muted-foreground/70 xl:block">
+                  Space to play · ← → to scrub
                 </p>
               </div>
             </div>

@@ -48,6 +48,25 @@ interface ControlRailProps {
   onShowSunChange: (value: boolean) => void;
   showHeatmap: boolean;
   onShowHeatmapChange: (value: boolean) => void;
+  /** Live headline numbers, surfaced at the top of the rail. */
+  capacityKw: number;
+  annualKwh: number;
+}
+
+/** Groups the rail into scannable blocks instead of one long control column. */
+function Section({ title, caption }: { title: string; caption?: string }) {
+  return (
+    <div className="space-y-1 border-t border-border/70 pt-4">
+      <h3 className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+        {title}
+      </h3>
+      {caption ? (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {caption}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function Field({
@@ -202,19 +221,40 @@ export function ControlRail(props: ControlRailProps) {
     onShowSunChange,
     showHeatmap,
     onShowHeatmapChange,
+    capacityKw,
+    annualKwh,
   } = props;
 
   return (
     <div className="flex h-full flex-col gap-5 overflow-y-auto p-5">
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold tracking-tight">Design inputs</h2>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Everything here feeds the solar model directly. Change any value and
-          the layout, shadows and yield update instantly.
-        </p>
+      {/* Live headline, so the answer stays on screen while you scroll inputs. */}
+      <div className="panel-surface relative overflow-hidden p-3.5">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+        <div className="flex items-baseline justify-between gap-3">
+          <div>
+            <p className="numeric text-2xl leading-none font-semibold tracking-tight">
+              {Math.round(annualKwh).toLocaleString()}
+            </p>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              kWh a year from {panelCount} modules
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="numeric text-sm font-semibold">
+              {capacityKw.toFixed(2)}
+            </p>
+            <p className="text-[11px] text-muted-foreground">kWp DC</p>
+          </div>
+        </div>
       </div>
 
-      <Field label="Location">
+      <div className="space-y-4">
+        <Section
+          title="The roof"
+          caption="Trace the outline on the model, then set how it faces the sun."
+        />
+
+        <Field label="Location">
         <Select value={site.id} onValueChange={onSiteChange}>
           <SelectTrigger className="w-full cursor-pointer">
             <SelectValue />
@@ -248,9 +288,15 @@ export function ControlRail(props: ControlRailProps) {
         <AzimuthDial value={azimuth} onChange={onAzimuthChange} />
       </Field>
 
-      <div className="h-px bg-border" />
+      </div>
 
-      <Field label="Module">
+      <div className="space-y-4">
+        <Section
+          title="The array"
+          caption="Everything here feeds the solar model directly. Change any value and the layout, shadows and yield update instantly."
+        />
+
+        <Field label="Module">
         <Select value={module.id} onValueChange={onModuleChange}>
           <SelectTrigger className="w-full cursor-pointer">
             <SelectValue />
@@ -389,26 +435,30 @@ export function ControlRail(props: ControlRailProps) {
         </div>
       </Field>
 
-      <div className="h-px bg-border" />
+      </div>
 
-      <div className="space-y-3">
-        <Label className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          View
-        </Label>
-        <label className="flex cursor-pointer items-center justify-between gap-3 text-sm">
-          <span className="flex items-center gap-2">
-            <Sun className="size-4 text-muted-foreground" />
-            Sun path
-          </span>
-          <Switch checked={showSun} onCheckedChange={onShowSunChange} />
-        </label>
-        <label className="flex cursor-pointer items-center justify-between gap-3 text-sm">
-          <span className="flex items-center gap-2">
-            <PanelTop className="size-4 text-muted-foreground" />
-            Yield heat map
-          </span>
-          <Switch checked={showHeatmap} onCheckedChange={onShowHeatmapChange} />
-        </label>
+      <div className="space-y-4">
+        <Section title="Display" caption="How the model is drawn." />
+
+        <div className="space-y-3">
+          <label className="flex cursor-pointer items-center justify-between gap-3 text-sm">
+            <span className="flex items-center gap-2">
+              <Sun className="size-4 text-muted-foreground" />
+              Sun path
+            </span>
+            <Switch checked={showSun} onCheckedChange={onShowSunChange} />
+          </label>
+          <label className="flex cursor-pointer items-center justify-between gap-3 text-sm">
+            <span className="flex items-center gap-2">
+              <PanelTop className="size-4 text-muted-foreground" />
+              Yield heat map
+            </span>
+            <Switch
+              checked={showHeatmap}
+              onCheckedChange={onShowHeatmapChange}
+            />
+          </label>
+        </div>
       </div>
 
       <div className="mt-auto space-y-2 pt-4">

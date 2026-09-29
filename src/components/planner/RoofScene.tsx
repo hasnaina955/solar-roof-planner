@@ -17,10 +17,18 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Vec3 } from "@/lib/solar";
-import type { Obstacle, Panel, Point2 } from "@/lib/roof";
+import type { Obstacle, Panel, Point2, RoofFrame } from "@/lib/roof";
 import { roofFrame } from "@/lib/roof";
+import {
+  makePanelTexture,
+  makeShingleTexture,
+  makeWallTexture,
+} from "./materials";
 
 export type SceneMode = "orbit" | "draw" | "obstacle";
+
+/** Camera framings the homeowner can jump between. */
+export type SceneView = "perspective" | "top" | "sun";
 
 interface RoofSceneProps {
   polygon: Point2[];
@@ -44,6 +52,8 @@ interface RoofSceneProps {
   onPickObstacle: (point: Point2) => void;
   showSun: boolean;
   showHeatmap: boolean;
+  /** Camera framing preset. Changing it tweens the camera into place. */
+  view?: SceneView;
 }
 
 const EAVE_HEIGHT = 2.9;
@@ -63,6 +73,14 @@ interface SceneContext {
   hemi: THREE.HemisphereLight;
   mode: SceneMode;
   panelPicks: THREE.Object3D[];
+  panelTexture: THREE.CanvasTexture;
+  shingleTexture: THREE.CanvasTexture;
+  wallTexture: THREE.CanvasTexture;
+  /** Set by the view-preset effect; the render loop tweens the camera to it. */
+  cameraGoal: { position: THREE.Vector3; target: THREE.Vector3 } | null;
+  /** Module rise-in animation, restarted whenever the layout changes. */
+  build: { start: number; cells: THREE.Matrix4[]; frames: THREE.Matrix4[] } | null;
+  framesMesh: THREE.InstancedMesh | null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -163,7 +181,9 @@ function disposeObject(root: THREE.Object3D) {
     if (Array.isArray(material)) material.forEach((m) => m.dispose());
     else if (material) {
       const spriteMaterial = material as THREE.SpriteMaterial;
-      spriteMaterial.map?.dispose();
+      // Textures flagged shared are reused across rebuilds, so they outlive the
+      // mesh that happens to be referencing them right now.
+      if (!spriteMaterial.map?.userData?.shared) spriteMaterial.map?.dispose();
       material.dispose();
     }
   });
@@ -172,7 +192,54 @@ function disposeObject(root: THREE.Object3D) {
 /** Lit fraction -> colour ramp: deep indigo (shaded) through amber (full sun). */
 function heatColour(lit: number): THREE.Color {
   const t = THREE.MathUtils.clamp(lit, 0, 1);
-  return new THREE.Color().setHSL(0.64 - 0.55 * t, 0.28 + 0.52 * t, 0.2 + 0.42 * t);
+  return new THREE.Color().setHSL(0.66 - 0.56 * t, 0.32 + 0.5 * t, 0.28 + 0.4 * t);
+}
+
+/**
+ * World-space bounds of the roof, house and the ground under it.
+ *
+ * Used to frame the camera, so the framing adapts when the homeowner traces a
+ * different roof or changes the pitch instead of being hard-coded.
+ */
+function roofWorldBounds(polygon: Point2[], frame: RoofFrame, tiltRad: number) {
+  const box = new THREE.Box3();
+  if (polygon.length < 3) {
+    box.setFromPoints([
+      new THREE.Vector3(-5, 0, -4),
+      new THREE.Vector3(5, 6, 4),
+    ]);
+  } else {
+    const e = frame.eaves;
+    const u = frame.upSlope;
+    const cosTilt = Math.cos(tiltRad) || 1;
+    let cx = 0;
+    let cy = 0;
+    for (const p of polygon) {
+      cx += p.x;
+      cy += p.y;
+    }
+    cx /= polygon.length;
+    cy /= polygon.length;
+    const offsetX = e.x * cx + (u.x / cosTilt) * cy;
+    const offsetZ = e.z * cx + (u.z / cosTilt) * cy;
+
+    for (const p of polygon) {
+      box.expandByPoint(
+        new THREE.Vector3(
+          e.x * p.x + u.x * p.y - offsetX,
+          EAVE_HEIGHT + u.y * p.y,
+          e.z * p.x + u.z * p.y - offsetZ,
+        ),
+      );
+    }
+    // Anchored to the ground so the walls are always in frame.
+    box.expandByPoint(new THREE.Vector3(box.min.x, 0, box.min.z));
+    box.expandByPoint(new THREE.Vector3(box.max.x, 0, box.max.z));
+  }
+
+  const centre = box.getCenter(new THREE.Vector3());
+  const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 4);
+  return { centre, radius };
 }
 
 /** Deterministic pseudo-random so the scenery is identical between mounts. */
@@ -199,12 +266,35 @@ function buildTree(scale: number, rand: () => number): THREE.Group {
   trunk.castShadow = true;
   tree.add(trunk);
 
-  const greens = ["#4f7a45", "#597f4b", "#456e3f"];
+  // Two species so the plot reads as planted rather than stamped.
+  if (rand() < 0.34) {
+    const coniferGreens = ["#3d6035", "#456b3b", "#365730"];
+    const tiers = 3;
+    for (let i = 0; i < tiers; i++) {
+      const t = i / tiers;
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry((0.92 - t * 0.46) * scale, (1.25 - t * 0.28) * scale, 9),
+        new THREE.MeshStandardMaterial({
+          color: coniferGreens[i % coniferGreens.length],
+          roughness: 1,
+          flatShading: true,
+        }),
+      );
+      cone.position.y = trunkHeight * 0.6 + t * 0.82 * scale + 0.3 * scale;
+      cone.castShadow = true;
+      cone.receiveShadow = true;
+      tree.add(cone);
+    }
+    return tree;
+  }
+
+  const greens = ["#4f7a45", "#597f4b", "#456e3f", "#527b48"];
   const blobs = 3 + Math.floor(rand() * 2);
   for (let i = 0; i < blobs; i++) {
     const radius = (0.62 + rand() * 0.4) * scale;
     const foliage = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(radius, 0),
+      // Detail 1 keeps the canopy faceted but no longer crystalline.
+      new THREE.IcosahedronGeometry(radius, 1),
       new THREE.MeshStandardMaterial({
         color: greens[Math.floor(rand() * greens.length)],
         roughness: 0.95,
@@ -217,6 +307,7 @@ function buildTree(scale: number, rand: () => number): THREE.Group {
       (rand() - 0.5) * 0.7 * scale,
     );
     foliage.castShadow = true;
+    foliage.receiveShadow = true;
     tree.add(foliage);
   }
   return tree;
@@ -278,6 +369,7 @@ interface HouseBuildInput {
   /** Unit roof normal in world space. */
   normal: THREE.Vector3;
   roofMesh: THREE.Mesh;
+  wallTexture: THREE.Texture;
 }
 
 /**
@@ -290,6 +382,7 @@ function buildHouse({
   origin,
   normal,
   roofMesh,
+  wallTexture,
 }: HouseBuildInput): THREE.Group {
   const house = new THREE.Group();
 
@@ -304,11 +397,16 @@ function buildHouse({
     origin.y - (normal.x * (x - origin.x) + normal.z * (z - origin.z)) / normal.y;
 
   const positions: number[] = [];
+  // UVs run along the wall in metres horizontally and height in metres
+  // vertically, which is why the wall texture tiles at real-world scale.
+  const uvs: number[] = [];
+  let run = 0;
   for (let i = 0; i < corners.length; i++) {
     const a = corners[i];
     const b = corners[(i + 1) % corners.length];
     const ay = heightAt(a.x, a.z);
     const by = heightAt(b.x, b.z);
+    const span = Math.hypot(b.x - a.x, b.z - a.z);
     // Two triangles per wall panel, wound counter-clockwise seen from outside.
     positions.push(
       a.x, 0, a.z,
@@ -318,6 +416,15 @@ function buildHouse({
       b.x, by, b.z,
       a.x, ay, a.z,
     );
+    uvs.push(
+      run, 0,
+      run + span, 0,
+      run + span, by,
+      run, 0,
+      run + span, by,
+      run, ay,
+    );
+    run += span;
   }
 
   const wallGeometry = new THREE.BufferGeometry();
@@ -325,13 +432,14 @@ function buildHouse({
     "position",
     new THREE.Float32BufferAttribute(positions, 3),
   );
+  wallGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   wallGeometry.computeVertexNormals();
 
   const walls = new THREE.Mesh(
     wallGeometry,
     new THREE.MeshStandardMaterial({
-      color: "#e7e2d8",
-      roughness: 0.9,
+      map: wallTexture,
+      roughness: 0.92,
       metalness: 0,
       side: THREE.DoubleSide,
     }),
@@ -465,6 +573,7 @@ export function RoofScene(props: RoofSceneProps) {
     onPickObstacle,
     showSun,
     showHeatmap,
+    view = "perspective",
   } = props;
 
   const mountRef = useRef<HTMLDivElement | null>(null);
@@ -474,6 +583,7 @@ export function RoofScene(props: RoofSceneProps) {
   const sunMarkerRef = useRef<THREE.Mesh | null>(null);
   const sunHaloRef = useRef<THREE.Sprite | null>(null);
   const hoverMetaRef = useRef({ standoff: 0.05, rackRad: 0 });
+
   const [ready, setReady] = useState(false);
   const [webglError, setWebglError] = useState<string | null>(null);
 
@@ -483,6 +593,15 @@ export function RoofScene(props: RoofSceneProps) {
   const frame = useMemo(() => roofFrame(tilt, azimuth), [tilt, azimuth]);
   const tiltRad = (tilt * Math.PI) / 180;
   const rackRad = (rackTilt * Math.PI) / 180;
+  const bounds = useMemo(
+    () => roofWorldBounds(polygon, frame, tiltRad),
+    [polygon, frame, tiltRad],
+  );
+
+  // Read through a ref so the sun view can follow the live sun without the
+  // preset effect re-running on every sweep frame and re-tweening the camera.
+  const sunDirRef = useRef(sunDirection);
+  sunDirRef.current = sunDirection;
 
   /* -------------------------------------------------------------- *
    * Renderer bootstrap (runs once)
@@ -532,15 +651,47 @@ export function RoofScene(props: RoofSceneProps) {
     controls.update();
 
     // Sky dome with a vertical gradient so the scene has weather, not a flat fill.
+    const skyTexture = makeSkyTexture();
     const sky = new THREE.Mesh(
       new THREE.SphereGeometry(260, 32, 20),
       new THREE.MeshBasicMaterial({
-        map: makeSkyTexture(),
+        map: skyTexture,
         side: THREE.BackSide,
         fog: false,
       }),
     );
     scene.add(sky);
+
+    // Image-based lighting. A throwaway sky+ground scene is baked into an
+    // environment map so the glass modules and aluminium frames have something
+    // real to reflect; without it, metallic surfaces render as flat black.
+    const envScene = new THREE.Scene();
+    envScene.add(
+      new THREE.Mesh(
+        new THREE.SphereGeometry(50, 24, 16),
+        new THREE.MeshBasicMaterial({ map: skyTexture, side: THREE.BackSide }),
+      ),
+    );
+    const envGround = new THREE.Mesh(
+      new THREE.CircleGeometry(60, 24),
+      new THREE.MeshBasicMaterial({ color: 0x87977b, side: THREE.DoubleSide }),
+    );
+    envGround.rotation.x = -Math.PI / 2;
+    envGround.position.y = -3;
+    envScene.add(envGround);
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(envScene, 0.04).texture;
+    scene.environmentIntensity = 0.5;
+    pmrem.dispose();
+    // Free the probe's own geometry/material but leave the shared sky texture
+    // alone — the main sky dome still uses it.
+    envScene.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      mesh.geometry?.dispose?.();
+      const material = mesh.material;
+      if (Array.isArray(material)) material.forEach((m) => m.dispose());
+      else material?.dispose();
+    });
 
     // Ground
     const ground = new THREE.Mesh(
@@ -604,11 +755,11 @@ export function RoofScene(props: RoofSceneProps) {
 
     scene.add(buildScenery());
 
-    const hemi = new THREE.HemisphereLight(0xdceaff, 0xa8b48c, 1.5);
+    const hemi = new THREE.HemisphereLight(0xdceaff, 0xa8b48c, 0.95);
     scene.add(hemi);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.12));
 
-    const sunLight = new THREE.DirectionalLight(0xfff1d6, 3.2);
+    const sunLight = new THREE.DirectionalLight(0xfff0d2, 3);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.set(2048, 2048);
     sunLight.shadow.camera.near = 1;
@@ -646,7 +797,17 @@ export function RoofScene(props: RoofSceneProps) {
       hemi,
       mode,
       panelPicks: [],
+      panelTexture: makePanelTexture(),
+      shingleTexture: makeShingleTexture(),
+      wallTexture: makeWallTexture(),
+      cameraGoal: null,
+      build: null,
+      framesMesh: null,
     };
+    const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+    context.panelTexture.anisotropy = Math.min(8, maxAnisotropy);
+    context.shingleTexture.anisotropy = Math.min(8, maxAnisotropy);
+    context.wallTexture.anisotropy = Math.min(8, maxAnisotropy);
     sceneRef.current = context;
     setReady(true);
 
@@ -667,6 +828,8 @@ export function RoofScene(props: RoofSceneProps) {
 
     const onPointerDown = (event: PointerEvent) => {
       downAt = { x: event.clientX, y: event.clientY };
+      // Let a manual drag win immediately over any preset camera tween.
+      context.cameraGoal = null;
     };
 
     const onPointerUp = (event: PointerEvent) => {
@@ -702,9 +865,45 @@ export function RoofScene(props: RoofSceneProps) {
     renderer.domElement.addEventListener("pointerleave", onPointerLeave);
 
     let raf = 0;
+    const riseTmp = new THREE.Matrix4();
+    const scratch = new THREE.Matrix4();
     const animate = () => {
       raf = requestAnimationFrame(animate);
       controls.enabled = context.mode === "orbit";
+
+      // Ease the camera into a preset framing, then hand control back.
+      const goal = context.cameraGoal;
+      if (goal) {
+        camera.position.lerp(goal.position, 0.085);
+        controls.target.lerp(goal.target, 0.085);
+        if (camera.position.distanceTo(goal.position) < 0.05) {
+          camera.position.copy(goal.position);
+          controls.target.copy(goal.target);
+          context.cameraGoal = null;
+        }
+      }
+
+      // Modules drop onto the roof whenever the layout changes.
+      const build = context.build;
+      const framesMesh = context.framesMesh;
+      if (build && cellsRef.current && framesMesh) {
+        const elapsed = performance.now() - build.start;
+        let finished = true;
+        for (let i = 0; i < build.cells.length; i++) {
+          const t = THREE.MathUtils.clamp((elapsed - i * 9) / 380, 0, 1);
+          if (t < 1) finished = false;
+          const eased = 1 - Math.pow(1 - t, 3);
+          riseTmp.makeTranslation(0, 0, (1 - eased) * 0.9);
+          scratch.copy(build.cells[i]).premultiply(riseTmp);
+          cellsRef.current.setMatrixAt(i, scratch);
+          scratch.copy(build.frames[i]).premultiply(riseTmp);
+          framesMesh.setMatrixAt(i, scratch);
+        }
+        cellsRef.current.instanceMatrix.needsUpdate = true;
+        framesMesh.instanceMatrix.needsUpdate = true;
+        if (finished) context.build = null;
+      }
+
       controls.update();
       renderer.render(scene, camera);
     };
@@ -797,14 +996,22 @@ export function RoofScene(props: RoofSceneProps) {
       { depth: ROOF_THICKNESS, bevelEnabled: false },
     );
     slabGeometry.translate(0, 0, -ROOF_THICKNESS);
-    const roofMesh = new THREE.Mesh(
-      slabGeometry,
+    // ExtrudeGeometry splits into two material groups — the coplanar faces and
+    // the extruded edge — so the eave gets its own painted fascia board and the
+    // roof edge reads as a finished detail rather than exposed slab.
+    const roofMesh = new THREE.Mesh(slabGeometry, [
       new THREE.MeshStandardMaterial({
-        color: "#7c8494",
-        roughness: 0.88,
-        metalness: 0.04,
+        // Roof UVs are in metres, so the shingle courses tile at real scale.
+        map: ctx.shingleTexture,
+        roughness: 0.95,
+        metalness: 0,
       }),
-    );
+      new THREE.MeshStandardMaterial({
+        color: "#e9e6df",
+        roughness: 0.62,
+        metalness: 0.02,
+      }),
+    ]);
     roofMesh.castShadow = true;
     roofMesh.receiveShadow = true;
     roofGroup.add(roofMesh);
@@ -839,7 +1046,13 @@ export function RoofScene(props: RoofSceneProps) {
     roofGroup.getWorldPosition(origin);
     const worldNormal = n.clone().normalize();
 
-    const house = buildHouse({ wallPolygon, origin, normal: worldNormal, roofMesh });
+    const house = buildHouse({
+      wallPolygon,
+      origin,
+      normal: worldNormal,
+      roofMesh,
+      wallTexture: ctx.wallTexture,
+    });
     scene.add(house);
 
     return () => {
@@ -869,18 +1082,24 @@ export function RoofScene(props: RoofSceneProps) {
       const frames = new THREE.InstancedMesh(
         new THREE.BoxGeometry(1, 1, 1),
         new THREE.MeshStandardMaterial({
-          color: "#20242c",
-          roughness: 0.45,
-          metalness: 0.6,
+          color: "#9ba4ae",
+          roughness: 0.36,
+          metalness: 0.55,
+          envMapIntensity: 1.1,
         }),
         panels.length,
       );
       const cells = new THREE.InstancedMesh(
         new THREE.BoxGeometry(1, 1, 1),
         new THREE.MeshStandardMaterial({
-          color: "#16294a",
-          roughness: 0.22,
-          metalness: 0.45,
+          map: ctx.panelTexture,
+          // Instanced colours multiply the base colour, so this has to stay
+          // white — setting it to the panel blue as well squares the darkness
+          // and the modules render effectively black.
+          color: "#ffffff",
+          roughness: 0.26,
+          metalness: 0.22,
+          envMapIntensity: 1.6,
         }),
         panels.length,
       );
@@ -890,6 +1109,8 @@ export function RoofScene(props: RoofSceneProps) {
       cells.receiveShadow = true;
 
       const dummy = new THREE.Object3D();
+      const cellMatrices: THREE.Matrix4[] = [];
+      const frameMatrices: THREE.Matrix4[] = [];
       panels.forEach((panel, index) => {
         const centreX = panel.x + panel.w / 2;
         const centreY = panel.y + (moduleLength / 2) * rackCos;
@@ -900,19 +1121,28 @@ export function RoofScene(props: RoofSceneProps) {
         dummy.scale.set(panel.w - 0.03, moduleLength - 0.03, 0.035);
         dummy.updateMatrix();
         cells.setMatrixAt(index, dummy.matrix);
+        cellMatrices.push(dummy.matrix.clone());
 
         dummy.position.set(centreX, centreY, centreZ - 0.03);
         dummy.scale.set(panel.w, moduleLength, 0.03);
         dummy.updateMatrix();
         frames.setMatrixAt(index, dummy.matrix);
+        frameMatrices.push(dummy.matrix.clone());
 
-        cells.setColorAt(index, new THREE.Color("#16294a"));
+        cells.setColorAt(index, new THREE.Color("#ffffff"));
       });
 
       cells.instanceMatrix.needsUpdate = true;
       frames.instanceMatrix.needsUpdate = true;
       group.add(frames, cells);
       cellsRef.current = cells;
+      ctx.framesMesh = frames;
+      // Restart the rise-in so a new layout visibly assembles itself.
+      ctx.build = {
+        start: performance.now(),
+        cells: cellMatrices,
+        frames: frameMatrices,
+      };
 
       hoverMetaRef.current = {
         standoff: moduleStandoff,
@@ -939,24 +1169,51 @@ export function RoofScene(props: RoofSceneProps) {
       });
     }
 
+    // Roof penetrations are drawn as real vent stacks rather than raw boxes.
+    // The shading model still uses the full footprint (slightly conservative),
+    // so what casts the shadow here stays honest to the physics.
+    const stackMaterial = new THREE.MeshStandardMaterial({
+      color: "#b3bbc5",
+      roughness: 0.3,
+      metalness: 0.75,
+      envMapIntensity: 1.2,
+    });
     for (const obstacle of obstacles) {
       const height = Math.max(obstacle.height, 0.1);
-      const box = new THREE.Mesh(
-        new THREE.BoxGeometry(obstacle.w, obstacle.h, height),
-        new THREE.MeshStandardMaterial({
-          color: "#9aa2af",
-          roughness: 0.5,
-          metalness: 0.35,
-        }),
+      const radius = Math.max(0.08, Math.min(obstacle.w, obstacle.h) / 2);
+      const stack = new THREE.Group();
+
+      const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius * 0.78, radius * 0.92, height, 20),
+        stackMaterial,
       );
-      box.position.set(
+      body.position.y = height / 2;
+
+      const collar = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius * 1.02, radius * 1.02, 0.07, 20),
+        stackMaterial,
+      );
+      collar.position.y = 0.035;
+
+      const cap = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius * 1.06, radius * 1.06, 0.05, 20),
+        stackMaterial,
+      );
+      cap.position.y = height;
+
+      stack.add(body, collar, cap);
+      stack.traverse((child) => {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      });
+      // Cylinders are built along +Y; the roof plane's up axis is local +Z.
+      stack.rotation.x = Math.PI / 2;
+      stack.position.set(
         obstacle.x + obstacle.w / 2,
         obstacle.y + obstacle.h / 2,
-        height / 2,
+        0,
       );
-      box.castShadow = true;
-      box.receiveShadow = true;
-      group.add(box);
+      group.add(stack);
     }
 
     ctx.panelPicks = group.children.filter(
@@ -968,6 +1225,8 @@ export function RoofScene(props: RoofSceneProps) {
       disposeObject(group);
       ctx.panelPicks = [];
       cellsRef.current = null;
+      ctx.framesMesh = null;
+      ctx.build = null;
       hoverLineRef.current = null;
     };
   }, [panels, obstacles, rackRad, ready]);
@@ -978,13 +1237,53 @@ export function RoofScene(props: RoofSceneProps) {
   useEffect(() => {
     const cells = cellsRef.current;
     if (!cells) return;
-    const base = new THREE.Color("#16294a");
+    const material = cells.material as THREE.MeshStandardMaterial;
+    // Two genuinely different views: realistic textured modules, or an analytic
+    // heat map where the instance colour is the whole story. Swapping the map
+    // out in heat-map mode keeps the ramp from being muddied by the cell grid.
+    const wantedMap = showHeatmap ? null : (sceneRef.current?.panelTexture ?? null);
+    if (material.map !== wantedMap) {
+      material.map = wantedMap;
+      material.needsUpdate = true;
+    }
+    material.roughness = showHeatmap ? 0.6 : 0.26;
+    material.metalness = showHeatmap ? 0.05 : 0.22;
+
+    const base = new THREE.Color("#ffffff");
     panels.forEach((_, index) => {
       const lit = 1 - (shades[index] ?? 0);
       cells.setColorAt(index, showHeatmap ? heatColour(lit) : base);
     });
     if (cells.instanceColor) cells.instanceColor.needsUpdate = true;
   }, [shades, showHeatmap, panels, ready]);
+
+  /* -------------------------------------------------------------- *
+   * Camera presets: perspective / top-down / the sun's own eye
+   * -------------------------------------------------------------- */
+  useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!ctx || !ready) return;
+
+    const { centre, radius } = bounds;
+    const sun = sunDirRef.current;
+    const useSun = view === "sun" && sun.y > 0.1;
+    const direction =
+      view === "top"
+        ? new THREE.Vector3(0.0001, 1, 0.0001)
+        : useSun
+          ? new THREE.Vector3(sun.x, sun.y, sun.z)
+          : new THREE.Vector3(0.62, 0.5, 0.62);
+    direction.normalize();
+
+    // Distances chosen so the model's bounding box fills ~90% of the frame at
+    // every pitch; verified in scripts/verify-framing.ts.
+    const distance = radius * (view === "top" ? 3.1 : 3);
+    const goal = {
+      position: centre.clone().addScaledVector(direction, distance),
+      target: centre.clone(),
+    };
+    ctx.cameraGoal = goal;
+  }, [view, bounds, ready]);
 
   /* -------------------------------------------------------------- *
    * Hover highlight
@@ -1172,8 +1471,8 @@ export function RoofScene(props: RoofSceneProps) {
     const dir = new THREE.Vector3(sunDirection.x, sunDirection.y, sunDirection.z);
     const isUp = sunDirection.y > -0.05;
     ctx.sunLight.position.copy(dir).multiplyScalar(80);
-    ctx.sunLight.intensity = isUp ? 3.2 : 0.02;
-    ctx.hemi.intensity = isUp ? 1.5 : 0.6;
+    ctx.sunLight.intensity = isUp ? 3 : 0.02;
+    ctx.hemi.intensity = isUp ? 0.95 : 0.42;
 
     const marker = sunMarkerRef.current;
     const halo = sunHaloRef.current;
