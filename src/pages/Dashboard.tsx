@@ -7,6 +7,7 @@ import {
   Loader2,
   LogOut,
   Pencil,
+  PlugZap,
   RotateCcw,
   Trash2,
   Undo2,
@@ -58,6 +59,12 @@ import {
 
 import { ControlRail } from "@/components/planner/ControlRail";
 import { InsightRail } from "@/components/planner/InsightRail";
+import { LoadCalculator } from "@/components/planner/LoadCalculator";
+import {
+  defaultAppliances,
+  summariseUsage,
+  type Appliance,
+} from "@/lib/appliances";
 import { RoofScene, type SceneMode } from "@/components/planner/RoofScene";
 import {
   SavedDesigns,
@@ -88,7 +95,10 @@ export default function Dashboard() {
   const [setback, setSetback] = useState(0.4);
   const [polygon, setPolygon] = useState<Point2[]>(starterRoof);
   const [obstacles, setObstacles] = useState<Obstacle[]>(DEFAULT_OBSTACLES);
-  const [annualUsage, setAnnualUsage] = useState(10500);
+  const [appliances, setAppliances] = useState<Appliance[]>(defaultAppliances);
+  /** null = install every position the roof will take. */
+  const [panelLimit, setPanelLimit] = useState<number | null>(null);
+  const [moduleWatts, setModuleWatts] = useState(MODULE_PRESETS[1].wattage);
 
   const [dayOfYear, setDayOfYear] = useState(172);
   const [minutes, setMinutes] = useState(13 * 60);
@@ -146,15 +156,27 @@ export default function Dashboard() {
     ],
   );
 
-  const panelCount = layout.panels.length;
-  const capacityW = panelCount * modulePreset.wattage;
+  // Selecting a module preset resets the nameplate watts to that preset.
+  useEffect(() => {
+    setModuleWatts(modulePreset.wattage);
+  }, [modulePreset.id, modulePreset.wattage]);
+
+  const usage = useMemo(() => summariseUsage(appliances), [appliances]);
+  const maxPanels = layout.panels.length;
+  const panelCount =
+    panelLimit === null ? maxPanels : Math.max(0, Math.min(panelLimit, maxPanels));
+  const installedPanels = useMemo(
+    () => layout.panels.slice(0, panelCount),
+    [layout.panels, panelCount],
+  );
+  const capacityW = panelCount * moduleWatts;
 
   const system = useMemo<SystemSpec>(
     () => ({
       module: {
         length: modulePreset.length,
         width: modulePreset.width,
-        wattage: modulePreset.wattage,
+        wattage: moduleWatts,
         tempCoefficient: modulePreset.tempCoefficient,
       },
       inverterWatts: Math.max(1, capacityW / DC_AC_RATIO),
@@ -169,6 +191,7 @@ export default function Dashboard() {
     }),
     [
       modulePreset,
+      moduleWatts,
       capacityW,
       site.latitude,
       site.longitude,
@@ -198,21 +221,28 @@ export default function Dashboard() {
   const shades = useMemo(
     () =>
       computeShading(
-        layout.panels,
+        installedPanels,
         obstacles,
         frame,
         layout.moduleHeight,
         layout.rowsCanShade,
         sun.direction,
       ),
-    [layout.panels, layout.moduleHeight, layout.rowsCanShade, obstacles, frame, sun.direction],
+    [
+      installedPanels,
+      layout.moduleHeight,
+      layout.rowsCanShade,
+      obstacles,
+      frame,
+      sun.direction,
+    ],
   );
 
   const derate = useMemo(() => {
-    if (layout.panels.length === 0) return 1;
+    if (installedPanels.length === 0) return 1;
     const total = shades.reduce((sum, value) => sum + value, 0);
-    return 1 - total / layout.panels.length;
-  }, [shades, layout.panels.length]);
+    return 1 - total / installedPanels.length;
+  }, [shades, installedPanels.length]);
 
   const energy = useMemo(
     () => annualEnergy(system, panelCount, tilt, azimuth, derate),
@@ -397,6 +427,7 @@ export default function Dashboard() {
   const handleLoad = (design: SavedDesign) => {
     setSiteId(design.siteId);
     setModuleId(design.moduleId);
+    setPanelLimit(null);
     setTilt(design.tilt);
     setAzimuth(design.azimuth);
     setOrientation(design.orientation);
@@ -420,16 +451,16 @@ export default function Dashboard() {
    * Derived view values
    * ------------------------------------------------------------ */
   const roofArea = Math.abs(polygonArea(polygon));
-  const moduleArea = layout.moduleAlongSlope * layout.moduleAlongEaves;
+  const moduleArea = modulePreset.length * modulePreset.width;
   const coveredArea = panelCount * moduleArea;
   // Preview uses the raw points: normalising would shift the outline away from
   // where the user actually clicked. Normalisation happens on commit instead.
   const ghostPolygon =
     mode === "draw" && drawPoints.length >= 3 ? drawPoints : [];
 
-  const hovered = layout.panels.find((panel) => panel.id === hoveredPanel);
+  const hovered = installedPanels.find((panel) => panel.id === hoveredPanel);
   const hoveredLabel = hovered
-    ? `Module ${hovered.row + 1}-${hovered.column + 1} · row ${hovered.row + 1}, column ${hovered.column + 1} · ${Math.round((1 - (shades[layout.panels.indexOf(hovered)] ?? 0)) * 100)}% lit`
+    ? `Module ${hovered.row + 1}-${hovered.column + 1} · row ${hovered.row + 1}, column ${hovered.column + 1} · ${Math.round((1 - (shades[installedPanels.indexOf(hovered)] ?? 0)) * 100)}% lit`
     : null;
 
   return (
@@ -452,6 +483,33 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="cursor-pointer">
+                <PlugZap className="size-4" />
+                <span className="hidden sm:inline">Usage</span>
+                <span className="numeric rounded-full bg-muted px-1.5 text-xs">
+                  {Math.round(usage.annualKwh).toLocaleString()}
+                </span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>What you actually use</DialogTitle>
+                <DialogDescription>
+                  Build your household from appliances to see the draw each one
+                  is responsible for, and how much of it the array covers.
+                </DialogDescription>
+              </DialogHeader>
+              <LoadCalculator
+                appliances={appliances}
+                onChange={setAppliances}
+                solarAnnualKwh={energy.annualKwh}
+                solarPeakWatts={live.ac}
+              />
+            </DialogContent>
+          </Dialog>
+
           <Dialog>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="cursor-pointer">
@@ -517,12 +575,16 @@ export default function Dashboard() {
             onRackTiltChange={setRackTilt}
             setback={setback}
             onSetbackChange={setSetback}
+            maxPanels={maxPanels}
+            panelCount={panelCount}
+            onPanelCountChange={setPanelLimit}
+            onUseMaxPanels={() => setPanelLimit(null)}
+            moduleWatts={moduleWatts}
+            onModuleWattsChange={setModuleWatts}
             showSun={showSun}
             onShowSunChange={setShowSun}
             showHeatmap={showHeatmap}
             onShowHeatmapChange={setShowHeatmap}
-            annualUsage={annualUsage}
-            onAnnualUsageChange={setAnnualUsage}
           />
         </aside>
 
@@ -530,7 +592,7 @@ export default function Dashboard() {
           <div className="relative min-h-0 flex-1 overflow-hidden rounded-none bg-[#eaeef2]">
             <RoofScene
               polygon={polygon}
-              panels={layout.panels}
+              panels={installedPanels}
               shades={shades}
               obstacles={obstacles}
               tilt={tilt}
@@ -701,12 +763,13 @@ export default function Dashboard() {
             poa={live.poa}
             sunAltitude={sun.altitude}
             sunAzimuth={sun.azimuth}
+            maxPanels={maxPanels}
             rowPitch={layout.rowPitch}
             designAltitude={layout.designAltitude}
             mounting={mounting}
             moduleTilt={layout.moduleTilt}
             moduleAlongSlope={layout.moduleAlongSlope}
-            annualUsage={annualUsage}
+            annualUsage={usage.annualKwh}
           />
         </aside>
       </div>

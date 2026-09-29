@@ -50,6 +50,7 @@ interface InsightRailProps {
   poa: number;
   sunAltitude: number;
   sunAzimuth: number;
+  maxPanels: number;
   rowPitch: number;
   designAltitude: number;
   mounting: "flush" | "racked";
@@ -127,6 +128,7 @@ export function InsightRail(props: InsightRailProps) {
     poa,
     sunAltitude,
     sunAzimuth,
+    maxPanels,
     rowPitch,
     designAltitude,
     mounting,
@@ -152,7 +154,11 @@ export function InsightRail(props: InsightRailProps) {
           label="Capacity"
           value={capacityKw.toFixed(2)}
           unit="kWp"
-          sub={`${panelCount} modules · DC`}
+          sub={
+            panelCount < maxPanels
+              ? `${panelCount} of ${maxPanels} modules · ${maxPanels - panelCount} spare`
+              : `${panelCount} modules · roof full`
+          }
           icon={Gauge}
           accent
         />

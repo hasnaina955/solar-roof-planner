@@ -38,12 +38,16 @@ interface ControlRailProps {
   onRackTiltChange: (value: number) => void;
   setback: number;
   onSetbackChange: (value: number) => void;
+  maxPanels: number;
+  panelCount: number;
+  onPanelCountChange: (value: number) => void;
+  onUseMaxPanels: () => void;
+  moduleWatts: number;
+  onModuleWattsChange: (value: number) => void;
   showSun: boolean;
   onShowSunChange: (value: boolean) => void;
   showHeatmap: boolean;
   onShowHeatmapChange: (value: boolean) => void;
-  annualUsage: number;
-  onAnnualUsageChange: (value: number) => void;
 }
 
 function Field({
@@ -188,12 +192,16 @@ export function ControlRail(props: ControlRailProps) {
     onRackTiltChange,
     setback,
     onSetbackChange,
+    maxPanels,
+    panelCount,
+    onPanelCountChange,
+    onUseMaxPanels,
+    moduleWatts,
+    onModuleWattsChange,
     showSun,
     onShowSunChange,
     showHeatmap,
     onShowHeatmapChange,
-    annualUsage,
-    onAnnualUsageChange,
   } = props;
 
   return (
@@ -335,20 +343,50 @@ export function ControlRail(props: ControlRailProps) {
         />
       </Field>
 
-      <div className="h-px bg-border" />
-
       <Field
-        label="Household use"
-        hint="Used to work out the share of your bill the array covers."
-        value={`${annualUsage.toLocaleString()} kWh/yr`}
+        label="Module output"
+        hint="Nameplate watts. Sets the capacity of every panel."
+        value={`${moduleWatts} W`}
       >
         <Slider
-          value={[annualUsage]}
-          min={2000}
-          max={30000}
-          step={500}
-          onValueChange={([value]) => onAnnualUsageChange(value)}
+          value={[moduleWatts]}
+          min={300}
+          max={700}
+          step={5}
+          onValueChange={([value]) => onModuleWattsChange(value)}
         />
+      </Field>
+
+      <Field
+        label="Array size"
+        hint={
+          panelCount < maxPanels
+            ? `${maxPanels - panelCount} more fit on this roof.`
+            : "Using every position that fits this roof."
+        }
+        value={`${panelCount} panels`}
+      >
+        <Slider
+          value={[panelCount]}
+          min={0}
+          max={Math.max(1, maxPanels)}
+          step={1}
+          onValueChange={([value]) => onPanelCountChange(value)}
+        />
+        <div className="flex items-center justify-between gap-2 pt-0.5">
+          <span className="numeric text-xs text-muted-foreground">
+            {((panelCount * moduleWatts) / 1000).toFixed(2)} kWp DC
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 cursor-pointer px-2 text-xs"
+            onClick={onUseMaxPanels}
+            disabled={panelCount >= maxPanels}
+          >
+            Use maximum
+          </Button>
+        </div>
       </Field>
 
       <div className="h-px bg-border" />
