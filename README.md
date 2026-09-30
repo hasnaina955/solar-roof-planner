@@ -58,11 +58,20 @@ pitch = L · (1 + tan α / tan β)
 where β is the module surface tilt and α the profile altitude at the design
 day. This is the single biggest driver of how many modules a roof holds.
 
-**Shading** — resolved geometrically each instant: obstruction box corners are
-projected along the sun vector onto the roof plane and hulled, racked rows
-project as parallelograms, and both are tested against a 5×5 sample grid inside
-every module. Only the beam component is removed by a shadow, so diffuse and
+**Shading** — resolved geometrically: obstruction box corners are projected
+along the sun vector onto the roof plane and hulled, racked rows project as
+parallelograms, and both are tested against a 5×5 sample grid inside every
+module. Only the beam component is removed by a shadow, so diffuse and
 ground-reflected light survive.
+
+For the live view the shading is resolved for the instant on screen. For the
+annual figure it is resolved on a seasonal grid instead: one representative
+day per month, sampled hourly from 06:00 to 18:00 and linearly interpolated.
+The annual integration then looks up the shaded fraction at each of its 15-minute
+timesteps and removes that much beam, so winter row shading and long noon
+shadows are accounted for in the year's total. Because the field depends only
+on the design — roof, modules, obstructions, tilt, azimuth — the annual kWh never
+moves when you scrub the day.
 
 ## Architecture
 
@@ -99,10 +108,11 @@ Typecheck with `bun tsc -b --noEmit`.
 
 Monthly clearness and temperature figures are typical public climate normals for
 each of the twelve sites, not a live satellite or TMY feed, so treat the output
-as a very good guide rather than a guarantee. Shading is resolved instantaneously
-and applied to the year as a derate rather than ray-traced for all 8,760 hours.
-The roof is a single tilted plane — hips, valleys and dormers are not modelled.
-A site survey still rules.
+as a very good guide rather than a guarantee. Annual shading is sampled on twelve
+representative days rather than recomputed for all 35,040 timesteps, and the
+hourly sampling window is clamped outside 06:00–18:00, which only matters at high
+latitudes in midsummer. The roof is a single tilted plane — hips, valleys and
+dormers are not modelled. A site survey still rules.
 
 ## Environment
 

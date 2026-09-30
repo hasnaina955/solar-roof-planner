@@ -36,6 +36,7 @@ import {
   DEFAULT_OBSTACLES,
   MODULE_PRESETS,
   SITE_PRESETS,
+  buildShadingField,
   computeShading,
   dedupePolygon,
   layoutPanels,
@@ -255,9 +256,41 @@ export default function Dashboard() {
     return 1 - total / installedPanels.length;
   }, [shades, installedPanels.length]);
 
+  // Shading resolved across the whole year rather than at the current instant.
+  // It depends only on the design, never on `minutes`, so the annual figure
+  // stays put while the sun is scrubbed.
+  const annualShading = useMemo(
+    () =>
+      buildShadingField({
+        panels: installedPanels,
+        obstacles,
+        frame,
+        moduleHeight: layout.moduleHeight,
+        rowsCanShade: layout.rowsCanShade,
+        latitude: site.latitude,
+        longitude: site.longitude,
+        utcOffset: site.utcOffset,
+      }),
+    [
+      installedPanels,
+      obstacles,
+      frame,
+      layout.moduleHeight,
+      layout.rowsCanShade,
+      site.latitude,
+      site.longitude,
+      site.utcOffset,
+    ],
+  );
+
+  const shadeAt = useMemo(
+    () => (at: Date, atMinutes: number) => annualShading.at(doyOf(at), atMinutes),
+    [annualShading],
+  );
+
   const energy = useMemo(
-    () => annualEnergy(system, panelCount, tilt, azimuth, derate),
-    [system, panelCount, tilt, azimuth, derate],
+    () => annualEnergy(system, panelCount, tilt, azimuth, shadeAt),
+    [system, panelCount, tilt, azimuth, shadeAt],
   );
 
   const monthIndex = monthOfDay(doyOf(date));
@@ -276,8 +309,8 @@ export default function Dashboard() {
   }, [sun, site.clearness, site.temperature, monthIndex, surface, derate, system, panelCount]);
 
   const dayCurve = useMemo(
-    () => dailyProfile(system, panelCount, surface, date, derate),
-    [system, panelCount, surface, date, derate],
+    () => dailyProfile(system, panelCount, surface, date, shadeAt),
+    [system, panelCount, surface, date, shadeAt],
   );
 
   const events = useMemo(() => dayEvents(system, date), [system, date]);

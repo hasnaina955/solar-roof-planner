@@ -356,17 +356,46 @@ const YEAR_STEPS_PER_DAY = 96; // 15-minute resolution
 const STEP_HOURS = 24 / YEAR_STEPS_PER_DAY;
 
 /**
- * Integrate a full year of production at 15-minute resolution.
- * Uses the fixed-sun geometry for every panel (module-level shading is
- * resolved separately and instantaneously), which is the standard
- * "shading derate" simplification used by fast layout tools.
+ * Fraction of the array in shadow at a given instant: 0 is fully lit, 1 is
+ * fully shaded.
+ *
+ * This is looked up per timestep rather than collapsed to a single derate,
+ * because the shadow geometry changes all year — a vent throws a long shadow
+ * at noon in December and a short one at noon in June, and row-to-row shading
+ * only bites when the sun is low. `buildShadingField` in `roof.ts` supplies a
+ * cheap interpolating implementation.
+ */
+export type ShadingLookup = (date: Date, minutesOfDay: number) => number;
+
+const NO_SHADING: ShadingLookup = () => 0;
+
+/**
+ * Plane-of-array irradiance with the beam component reduced by shadow.
+ *
+ * Only the beam term is scaled: diffuse light still reaches a shaded module
+ * from the rest of the sky, and the ground-reflected component is unaffected.
+ */
+function shadedPlaneOfArray(
+  parts: { beam: number; diffuse: number; ground: number },
+  shade: number,
+): number {
+  return parts.beam * (1 - shade) + parts.diffuse + parts.ground;
+}
+
+/**
+ * Integrate a full year of production at 15-minute resolution, resolving the
+ * shading geometry at every timestep through `shading`.
+ *
+ * The annual figure therefore depends only on the design — roof, modules,
+ * obstructions, tilt and azimuth — and never on which instant of the day the
+ * UI happens to be parked at.
  */
 export function annualEnergy(
   system: SystemSpec,
   panelCount: number,
   tilt: number,
   azimuth: number,
-  shadingFactor = 1,
+  shading: ShadingLookup = NO_SHADING,
 ): EnergyResult {
   const surface = { tilt, azimuth };
   const monthlyKwh = new Array(12).fill(0);
@@ -389,7 +418,8 @@ export function annualEnergy(
       );
       if (sun.altitude <= 0) continue;
       const sky = clearSkyIrradiance(sun.altitude, clearness);
-      const poa = planeOfArray(sky, sun, surface, system.albedo) * shadingFactor;
+      const parts = planeOfArrayComponents(sky, sun, surface, system.albedo);
+      const poa = shadedPlaneOfArray(parts, shading(date, minutes));
       if (poa <= 0) continue;
       const { ac } = acPowerWatts(system, poa, ambient, panelCount);
       const kwh = (ac * STEP_HOURS) / 1000;
@@ -446,13 +476,13 @@ export function instantaneous(
   return { date, minutesOfDay, sun, poa, acWatts: ac, clearness };
 }
 
-/** Hourly AC production curve for one day, kWh. */
+/** Half-hourly AC production curve for one day, kWh. */
 export function dailyProfile(
   system: SystemSpec,
   panelCount: number,
   surface: PlaneOrientation,
   date: Date,
-  shadingFactor = 1,
+  shading: ShadingLookup = NO_SHADING,
 ): { hour: number; kwh: number; altitude: number }[] {
   const out: { hour: number; kwh: number; altitude: number }[] = [];
   const month = monthOfDay(dayOfYear(date));
@@ -471,7 +501,8 @@ export function dailyProfile(
       continue;
     }
     const sky = clearSkyIrradiance(sun.altitude, clearness);
-    const poa = planeOfArray(sky, sun, surface, system.albedo) * shadingFactor;
+    const parts = planeOfArrayComponents(sky, sun, surface, system.albedo);
+    const poa = shadedPlaneOfArray(parts, shading(date, hour * 60));
     const { ac } = acPowerWatts(system, poa, ambient, panelCount);
     out.push({ hour, kwh: (ac * 0.5) / 1000, altitude: sun.altitude });
   }

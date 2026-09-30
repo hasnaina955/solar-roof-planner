@@ -14,6 +14,7 @@
 import {
   DEG,
   requiredRowPitch,
+  solarPosition,
   winterSolsticeNoonAltitude,
   type Vec3,
 } from "./solar";
@@ -602,6 +603,125 @@ export function computeShading(
   });
 
   return shaded;
+}
+
+/* ------------------------------------------------------------------ *
+ * Annual shading field
+ * ------------------------------------------------------------------ */
+
+/**
+ * A representative day per month. The shadow geometry moves with the solar
+ * declination, so twelve days spread through the year describe the whole year
+ * to within a couple of percent — far better than extrapolating a single
+ * instant across all 365 days.
+ */
+const MONTH_SAMPLE_DOY = [15, 46, 74, 105, 135, 166, 196, 227, 257, 288, 318, 349];
+
+/** Hourly shading samples spanning 06:00 to 18:00 local clock. */
+const HOUR_SAMPLE_FIRST = 360;
+const HOUR_SAMPLE_COUNT = 13;
+const HOUR_SAMPLE_STEP = 60;
+
+export interface ShadingField {
+  /**
+   * Fraction of the array in shadow at a day-of-year and local clock time,
+   * linearly interpolated between the sampled months and hours. Clamped at the
+   * ends of the sampled hour range, which only matters at high latitudes in
+   * midsummer when the sun is still up outside 06:00–18:00.
+   */
+  at(doy: number, minutes: number): number;
+}
+
+export interface ShadingFieldParams {
+  panels: Panel[];
+  obstacles: Obstacle[];
+  frame: RoofFrame;
+  /** Height of a module's top edge above the roof plane, metres. */
+  moduleHeight: number;
+  /** Whether modules can shade the row in front of them. */
+  rowsCanShade: boolean;
+  /** Site coordinates, needed to place the sun at each sample. */
+  latitude: number;
+  longitude: number;
+  utcOffset: number;
+}
+
+const NO_SHADING_FIELD: ShadingField = { at: () => 0 };
+
+/**
+ * Pre-compute the shaded fraction of the array across the whole year.
+ *
+ * The result depends only on the design, so it can be memoised against the
+ * geometry and reused for every timestep of the annual integration.
+ */
+export function buildShadingField(params: ShadingFieldParams): ShadingField {
+  const { panels, obstacles, frame, moduleHeight, rowsCanShade } = params;
+  if (panels.length === 0) return NO_SHADING_FIELD;
+
+  const grid = new Float32Array(12 * HOUR_SAMPLE_COUNT);
+
+  for (let month = 0; month < 12; month++) {
+    const date = new Date(Date.UTC(2023, 0, MONTH_SAMPLE_DOY[month]));
+    for (let hour = 0; hour < HOUR_SAMPLE_COUNT; hour++) {
+      const minutes = HOUR_SAMPLE_FIRST + hour * HOUR_SAMPLE_STEP;
+      const sun = solarPosition(
+        params.latitude,
+        params.longitude,
+        params.utcOffset,
+        date,
+        minutes,
+      );
+      if (sun.altitude <= 0) continue;
+      const shades = computeShading(
+        panels,
+        obstacles,
+        frame,
+        moduleHeight,
+        rowsCanShade,
+        sun.direction,
+      );
+      let total = 0;
+      for (const value of shades) total += value;
+      grid[month * HOUR_SAMPLE_COUNT + hour] = total / shades.length;
+    }
+  }
+
+  return {
+    at(doy: number, minutes: number): number {
+      // Which pair of sampled months brackets this day, wrapping the year.
+      const day = ((doy % 365) + 365) % 365;
+      let lo = 0;
+      let hi = 1;
+      let monthT = 0;
+      for (let i = 0; i < 12; i++) {
+        const a = MONTH_SAMPLE_DOY[i];
+        const b =
+          i === 11 ? MONTH_SAMPLE_DOY[0] + 365 : MONTH_SAMPLE_DOY[i + 1];
+        const d = i === 11 && day < a ? day + 365 : day;
+        if (d >= a && d < b) {
+          lo = i;
+          hi = i === 11 ? 0 : i + 1;
+          monthT = (d - a) / (b - a);
+          break;
+        }
+      }
+
+      // Hour index, clamped to the sampled window.
+      const hourPos = (minutes - HOUR_SAMPLE_FIRST) / HOUR_SAMPLE_STEP;
+      const clamped = Math.min(Math.max(hourPos, 0), HOUR_SAMPLE_COUNT - 1);
+      const hourLo = Math.floor(clamped);
+      const hourHi = Math.min(hourLo + 1, HOUR_SAMPLE_COUNT - 1);
+      const hourT = clamped - hourLo;
+
+      const a =
+        grid[lo * HOUR_SAMPLE_COUNT + hourLo] * (1 - hourT) +
+        grid[lo * HOUR_SAMPLE_COUNT + hourHi] * hourT;
+      const b =
+        grid[hi * HOUR_SAMPLE_COUNT + hourLo] * (1 - hourT) +
+        grid[hi * HOUR_SAMPLE_COUNT + hourHi] * hourT;
+      return a * (1 - monthT) + b * monthT;
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ *
