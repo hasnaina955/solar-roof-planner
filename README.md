@@ -102,7 +102,23 @@ bun convex dev --once   # codegen the Convex client
 bun run dev
 ```
 
-Typecheck with `bun tsc -b --noEmit`.
+Typecheck with `bun tsc -b --noEmit`. Three scripts guard the parts of this
+project that break silently:
+
+```bash
+bunx tsx scripts/verify-shading.ts   # annual figure must not depend on the clock
+bunx tsx scripts/verify-lighting.ts  # scene lighting stays calibrated and finite
+bunx tsx scripts/calibration.ts      # specific yields per site
+```
+
+## Documentation
+
+| Document | What is in it |
+| --- | --- |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, commands, and the five things that will bite you |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Module map, the derivation chain, coordinate conventions |
+| [docs/PHYSICS.md](docs/PHYSICS.md) | The energy model, equations, calibration, known limits |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | What is shipped, what is missing, what is next |
 
 ## Accuracy and limitations
 

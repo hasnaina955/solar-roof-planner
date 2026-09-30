@@ -15,6 +15,7 @@ import {
   ThermometerSun,
   Trash2,
   Undo2,
+  Redo2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -32,6 +33,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
+import { useDesignHistory } from "@/hooks/use-design-history";
 import {
   DEFAULT_OBSTACLES,
   MODULE_PRESETS,
@@ -112,6 +114,58 @@ export default function Dashboard() {
   const [dayOfYear, setDayOfYear] = useState(172);
   const [minutes, setMinutes] = useState(13 * 60);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  /* ------------------------------------------------------------ *
+   * Undo / redo over the design state
+   * ------------------------------------------------------------ */
+  const design = useMemo(
+    () => ({
+      siteId,
+      moduleId,
+      tilt,
+      azimuth,
+      orientation,
+      mounting,
+      rackTilt,
+      setback,
+      polygon,
+      obstacles,
+      appliances,
+      panelLimit,
+      moduleWatts,
+    }),
+    [
+      siteId, moduleId, tilt, azimuth, orientation, mounting,
+      rackTilt, setback, polygon, obstacles, appliances, panelLimit, moduleWatts,
+    ],
+  );
+
+  const history = useDesignHistory({
+    read: () => design,
+    apply: (next) => {
+      setSiteId(next.siteId);
+      setModuleId(next.moduleId);
+      setTilt(next.tilt);
+      setAzimuth(next.azimuth);
+      setOrientation(next.orientation);
+      setMounting(next.mounting);
+      setRackTilt(next.rackTilt);
+      setSetback(next.setback);
+      setPolygon(next.polygon);
+      setObstacles(next.obstacles);
+      setAppliances(next.appliances);
+      setPanelLimit(next.panelLimit);
+      setModuleWatts(next.moduleWatts);
+    },
+    // Anything that reshapes the design is its own step; only continuous
+    // tweaks (tilt, azimuth, setback, rack tilt, panel count, watts) coalesce.
+    shapeOf: (d) =>
+      JSON.stringify([
+        d.moduleId, d.orientation, d.mounting,
+        d.polygon, d.obstacles, d.appliances,
+      ]),
+  });
+  const { undo, redo, canUndo, canRedo } = history;
 
   const [mode, setMode] = useState<SceneMode>("orbit");
   const [drawPoints, setDrawPoints] = useState<Point2[]>([]);
@@ -421,7 +475,30 @@ export default function Dashboard() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [undo, redo]);
+
+  /* ------------------------------------------------------------ *
+   * Undo / redo shortcuts
+   *
+   * Separate from the transport handler because Cmd/Ctrl must reach the
+   * browser's own editing bindings on text fields, which the guard above
+   * deliberately lets through.
+   * ------------------------------------------------------------ */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+      } else if ((key === "z" && event.shiftKey) || key === "y") {
+        event.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
 
   /* ------------------------------------------------------------ *
    * Drawing
@@ -533,6 +610,9 @@ export default function Dashboard() {
     setObstacles(design.obstacles);
     setMode("orbit");
     setDrawPoints([]);
+    // A loaded design is a fresh starting point, so undo should not reach back
+    // across into whatever was on screen before.
+    history.reset();
     toast.success(`Loaded “${design.name}”.`);
   };
 
@@ -657,6 +737,33 @@ export default function Dashboard() {
               />
             </DialogContent>
           </Dialog>
+
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="size-8 cursor-pointer p-0"
+              disabled={!canUndo}
+              onClick={undo}
+              title="Undo (Cmd/Ctrl+Z)"
+              aria-label="Undo"
+            >
+              <Undo2 className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="size-8 cursor-pointer p-0"
+              disabled={!canRedo}
+              onClick={redo}
+              title="Redo (Cmd/Ctrl+Shift+Z)"
+              aria-label="Redo"
+            >
+              <Redo2 className="size-4" />
+            </Button>
+          </div>
 
           <span className="hidden max-w-[180px] truncate text-xs text-muted-foreground md:inline">
             {user?.name || user?.email || "Guest"}
