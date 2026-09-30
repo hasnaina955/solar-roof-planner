@@ -11,6 +11,7 @@
  * which keeps panel counts and coverage percentages honest.
  */
 
+import { INDIA_SITES, IST_OFFSET } from "./india";
 import {
   DEG,
   requiredRowPitch,
@@ -841,6 +842,12 @@ export const SITE_PRESETS: SitePreset[] = [
     clearness: [0.68, 0.63, 0.62, 0.63, 0.6, 0.57, 0.62, 0.64, 0.66, 0.68, 0.67, 0.68],
     temperature: [23, 23, 21.5, 19.5, 17, 15, 13.5, 15, 17, 19.5, 21, 22.5],
   },
+  ...INDIA_SITES.map((site) => ({
+    ...site, region: "India · IST", utcOffset: IST_OFFSET,
+    // Shared illustrative curve, NOT city-specific measured weather.
+    clearness: [0.62, 0.68, 0.72, 0.74, 0.72, 0.55, 0.4, 0.42, 0.55, 0.68, 0.65, 0.6],
+    temperature: [18, 21, 26, 30, 33, 32, 29, 28, 28, 26, 22, 19],
+  })),
 ];
 
 export interface ModulePreset {

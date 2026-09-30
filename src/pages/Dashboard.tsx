@@ -24,6 +24,9 @@ import { toast } from "sonner";
 
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
+import { WorkspaceNav } from "@/components/WorkspaceNav";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { plannerToSimulation, readSimulationDraft, writeSimulationDraft } from "@/lib/simulation-project";
 import {
   Dialog,
   DialogContent,
@@ -67,10 +70,8 @@ import {
 
 import { ControlRail } from "@/components/planner/ControlRail";
 import { InsightRail } from "@/components/planner/InsightRail";
-import { LoadCalculator } from "@/components/planner/LoadCalculator";
 import {
   summariseUsage,
-  type Appliance,
 } from "@/lib/appliances";
 import {
   RoofScene,
@@ -102,8 +103,8 @@ function Planner({ ownerId }: { ownerId: string }) {
    * Design state
    * ------------------------------------------------------------ */
   const [initial] = useState(() => {
-    try { return readDraft(window.localStorage, ownerId) ?? defaultProject(); }
-    catch { return defaultProject(); }
+    try { return readDraft(window.localStorage, ownerId) ?? { ...defaultProject(), siteId: "delhi" }; }
+    catch { return { ...defaultProject(), siteId: "delhi" }; }
   });
   const history = useDesignHistory<PlannerDesign>(designFromProject(initial), CONTINUOUS_KEYS);
   const { design, edit, undo, redo, canUndo, canRedo } = history;
@@ -126,7 +127,6 @@ function Planner({ ownerId }: { ownerId: string }) {
   const setSetback = (value: number) => setField("setback", value);
   const setPolygon = useCallback((value: Point2[]) => setField("polygon", value), [setField]);
   const setObstacles = useCallback((value: SetStateAction<Obstacle[]>) => setField("obstacles", value), [setField]);
-  const setAppliances = (value: Appliance[]) => setField("appliances", value);
   const setPanelLimit = (value: number | null) => setField("panelLimit", value);
   const setModuleWatts = (value: number) => setField("moduleWatts", value);
 
@@ -627,6 +627,24 @@ function Planner({ ownerId }: { ownerId: string }) {
   /* ------------------------------------------------------------ *
    * Derived view values
    * ------------------------------------------------------------ */
+  const sendToSimulator = () => {
+    try {
+      const next = plannerToSimulation(project, panelCount, layout.moduleTilt, readSimulationDraft(window.localStorage, ownerId));
+      if (!writeSimulationDraft(window.localStorage, ownerId, next)) throw new Error("Browser storage unavailable for transfer.");
+      writeDraft(window.localStorage, ownerId, project);
+      toast.success("Transferred array and linked roof. Battery and schedules were preserved; geometric roof shading is not transferred.");
+      navigate("/simulator");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Could not transfer array."); }
+  };
+
+  const controlRail = <ControlRail site={site} onSiteChange={setSiteId} module={modulePreset} onModuleChange={setModuleId}
+    tilt={tilt} onTiltChange={setTilt} azimuth={azimuth} onAzimuthChange={setAzimuth}
+    orientation={orientation} onOrientationChange={setOrientation} mounting={mounting} onMountingChange={setMounting}
+    rackTilt={rackTilt} onRackTiltChange={setRackTilt} setback={setback} onSetbackChange={setSetback}
+    maxPanels={maxPanels} panelCount={panelCount} onPanelCountChange={setPanelLimit} onUseMaxPanels={() => setPanelLimit(null)}
+    moduleWatts={moduleWatts} onModuleWattsChange={setModuleWatts} showSun={showSun} onShowSunChange={setShowSun}
+    showHeatmap={showHeatmap} onShowHeatmapChange={setShowHeatmap} capacityKw={capacityW / 1000} annualKwh={energy.annualKwh} />;
+
   const roofArea = Math.abs(polygonArea(polygon));
   const moduleArea = modulePreset.length * modulePreset.width;
   const coveredArea = panelCount * moduleArea * Math.cos((layout.moduleTilt - tilt) * Math.PI / 180);
@@ -643,7 +661,8 @@ function Planner({ ownerId }: { ownerId: string }) {
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       {/* Header */}
-      <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-card/70 px-4 backdrop-blur">
+      <div className="shrink-0 border-b border-border bg-card/80 px-4 py-2"><WorkspaceNav /></div>
+      <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border bg-card/70 px-3 backdrop-blur sm:px-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="relative grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm">
             <BoxSelect className="size-4" />
@@ -684,32 +703,7 @@ function Planner({ ownerId }: { ownerId: string }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="cursor-pointer">
-                <PlugZap className="size-4" />
-                <span className="hidden sm:inline">Usage</span>
-                <span className="numeric rounded-full bg-muted px-1.5 text-xs">
-                  {Math.round(usage.annualKwh).toLocaleString()}
-                </span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>Household energy estimate</DialogTitle>
-                <DialogDescription>
-                  Estimate daily consumption and compare annual energy totals.
-                  This is not yet an operational appliance simulator.
-                </DialogDescription>
-              </DialogHeader>
-              <LoadCalculator
-                appliances={appliances}
-                onChange={setAppliances}
-                solarAnnualKwh={energy.annualKwh}
-                inverterWatts={capacityW > 0 ? system.inverterWatts : 0}
-              />
-            </DialogContent>
-          </Dialog>
+          <Button variant="outline" size="sm" onClick={sendToSimulator} aria-label="Send array to usage simulator"><PlugZap className="size-4" /><span className="hidden sm:inline">Simulate this array</span></Button>
 
           <Dialog>
             <DialogTrigger asChild>
@@ -786,36 +780,7 @@ function Planner({ ownerId }: { ownerId: string }) {
       {/* Workspace */}
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)_320px]">
         <aside className="hidden min-h-0 border-r border-border bg-card/40 lg:block">
-          <ControlRail
-            site={site}
-            onSiteChange={setSiteId}
-            module={modulePreset}
-            onModuleChange={setModuleId}
-            tilt={tilt}
-            onTiltChange={setTilt}
-            azimuth={azimuth}
-            onAzimuthChange={setAzimuth}
-            orientation={orientation}
-            onOrientationChange={setOrientation}
-            mounting={mounting}
-            onMountingChange={setMounting}
-            rackTilt={rackTilt}
-            onRackTiltChange={setRackTilt}
-            setback={setback}
-            onSetbackChange={setSetback}
-            maxPanels={maxPanels}
-            panelCount={panelCount}
-            onPanelCountChange={setPanelLimit}
-            onUseMaxPanels={() => setPanelLimit(null)}
-            moduleWatts={moduleWatts}
-            onModuleWattsChange={setModuleWatts}
-            showSun={showSun}
-            onShowSunChange={setShowSun}
-            showHeatmap={showHeatmap}
-            onShowHeatmapChange={setShowHeatmap}
-            capacityKw={capacityW / 1000}
-            annualKwh={energy.annualKwh}
-          />
+          {controlRail}
         </aside>
 
         <section className="relative flex min-h-0 min-w-0 flex-col">
@@ -1051,30 +1016,8 @@ function Planner({ ownerId }: { ownerId: string }) {
         </aside>
       </div>
 
-      {/* Mobile controls */}
-      <div className="shrink-0 border-t border-border bg-card/60 px-4 py-3 lg:hidden">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          {SITE_PRESETS.slice(0, 6).map((preset) => (
-            <Button
-              key={preset.id}
-              size="sm"
-              variant={preset.id === siteId ? "default" : "outline"}
-              className="shrink-0 cursor-pointer"
-              onClick={() => setSiteId(preset.id)}
-            >
-              {preset.name}
-            </Button>
-          ))}
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-          <p className="numeric">
-            {panelCount} modules · {(capacityW / 1000).toFixed(2)} kWp
-          </p>
-          <p className="numeric text-right">
-            {Math.round(energy.annualKwh).toLocaleString()} kWh/yr
-          </p>
-        </div>
-      </div>
+      {/* Full input parity on mobile; the same rail renders in a bottom sheet. */}
+      <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-card/80 px-4 py-3 lg:hidden"><p className="numeric text-xs">{panelCount} panels · {(capacityW / 1000).toFixed(2)} kWp</p><Sheet><SheetTrigger asChild><Button size="sm" variant="outline">All roof controls</Button></SheetTrigger><SheetContent side="bottom" className="h-[85vh] gap-0 rounded-t-2xl"><SheetHeader><SheetTitle>Roof & array inputs</SheetTitle><SheetDescription>All locations, modules, mounting and layout controls.</SheetDescription></SheetHeader><div className="min-h-0 flex-1">{controlRail}</div></SheetContent></Sheet></div>
 
       {isSaving && (
         <span className="pointer-events-none fixed bottom-4 left-4 hidden items-center gap-2 rounded-lg border border-border bg-card/90 px-3 py-2 text-xs shadow-sm backdrop-blur lg:flex">

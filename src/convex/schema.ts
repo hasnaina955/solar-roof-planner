@@ -33,7 +33,14 @@ const schema = defineSchema(
       role: v.optional(roleValidator), // role of the user. do not remove
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
-    // add other tables here
+    /** Complete standalone simulator scenarios; optional linked roof snapshot. */
+    simulations: defineTable({
+      owner: v.id("users"),
+      name: v.string(),
+      configuration: v.string(),
+      plannerProject: v.optional(projectValidator),
+      createdAt: v.number(),
+    }).index("by_owner", ["owner"]),
 
     /** Saved roof designs, so homeowners can compare options side by side. */
     designs: defineTable({

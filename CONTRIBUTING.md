@@ -47,7 +47,7 @@ setup example above is for your own machine only.
 ## Verification
 
 ```bash
-bun test scripts/trust.test.ts
+bun test scripts/trust.test.ts scripts/simulator.test.ts
 bun scripts/verify-shading.ts
 bun scripts/verify-lighting.ts
 bun scripts/calibration.ts
@@ -56,6 +56,8 @@ bun scripts/calibration.ts
 - **`trust.test.ts`**: independent geometric references, module normals,
   hemisphere winter, ray intersections, action-based history, validated project
   serialization and source-AST guards on annual memo dependencies/save wiring.
+- **`simulator.test.ts`**: bank topology, energy conservation, schedules/cycles,
+  reserve/rate/current/surge limits, grid cuts, scenario advice and persistence.
 - **`verify-shading.ts`**: seasonal samples compared with direct geometry;
   beam shadows remove energy. This is not a mounted clock-scrub test.
 - **`verify-lighting.ts`**: numeric model calibration/monotonicity/clamps across

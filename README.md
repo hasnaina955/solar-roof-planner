@@ -1,10 +1,25 @@
-# Helio — rooftop solar planning estimates
+# Helio — India solar usage simulator & 3D planner
 
-A 3D planner for homeowners exploring panel layouts before speaking to an
-installer. The next product milestone is a first-class multi-appliance Usage
-Simulator; the current usage tool is an **energy estimator**, not that simulator.
+Two dedicated tools for homeowners: an India-focused custom-system usage
+simulator at `/simulator`, and the existing roof planner at `/dashboard`.
+Start with equipment without drawing a roof, or send an Indian-site planned
+array into the simulator. Neither tool is certified electrical design.
 
-## Current capabilities
+## Usage simulator
+
+- Custom panels, battery volts/Ah/series/parallel, chemistry/reserve/current limits,
+  optional lead-acid rate penalty, inverter VA/watts/surge/DC voltage/efficiency.
+- Indian city/custom coordinates, IST schedules, 230 V / 50 Hz context.
+- Multiple overlapping appliance schedules and editable timed duty cycles.
+- Off-grid, hybrid mains bypass with daily cuts, grid-tied anti-islanding.
+- Event-aligned 1–7-day dispatch, battery SOC, unmet-load reasons, grid imports
+  and user-entered INR tariff estimates (variable energy charge only).
+- Saved complete scenarios, local recovery, baseline comparison and advice
+  derived from alternate simulated schedules.
+
+See [docs/SIMULATOR.md](docs/SIMULATOR.md) for equations and operating policy.
+
+## 3D planner capabilities
 
 - Trace a single roof plane; choose location, pitch, facing, modules and mounting.
 - Automatically place modules around vents with edge setbacks and winter-noon
@@ -19,14 +34,15 @@ Simulator; the current usage tool is an **energy estimator**, not that simulator
 
 “Generation / use” is an annual energy ratio, **not** load served or bill savings.
 The inverter limit is an equipment assumption, **not** the power available at any
-particular time. There is no battery dispatch, scheduling, surge, tariff or
-self-consumption model yet.
+particular time. The separate simulator supplies scheduled dispatch with explicit assumptions;
+planner annual ratios still do not establish load timing or bill savings.
 
 ## Stack and architecture
 
 Bun, Vite, React 19, TypeScript, Tailwind 4, shadcn/ui, Framer Motion, Recharts,
 imperative three.js, Convex and Convex Auth. Existing providers and protected
-routes are retained: `/` → `/auth` → `/dashboard`.
+routes/providers are retained; `/auth` now falls back to `/simulator` and preserves
+explicit planner return paths.
 
 | Module | Responsibility |
 | --- | --- |
@@ -47,7 +63,7 @@ servers; do not launch another dev server there.
 
 ```bash
 bun convex dev --once && bun tsc -b --noEmit
-bun test scripts/trust.test.ts
+bun test scripts/trust.test.ts scripts/simulator.test.ts
 bun scripts/verify-shading.ts
 bun scripts/verify-lighting.ts
 bun scripts/calibration.ts
@@ -60,6 +76,7 @@ interaction, visual, deployment ownership, or measured-yield validation tests.**
 
 ## Documentation
 
+- [Simulator](docs/SIMULATOR.md): India equipment inputs, energy dispatch and limits.
 - [Architecture](docs/ARCHITECTURE.md): state, persistence, coordinates, rendering.
 - [Physics and limits](docs/PHYSICS.md): equations, assumptions, reference tests.
 - [Roadmap](docs/ROADMAP.md): trust/recovery work and the two-tool product plan.

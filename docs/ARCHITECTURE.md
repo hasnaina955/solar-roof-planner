@@ -5,6 +5,17 @@ renderer. The domain calculations live outside rendering, so they can be tested
 without a WebGL context. `RoofScene` also calls the shared irradiance model for
 art-directed lighting; it does not own layout or production calculations.
 
+## Dedicated simulator
+
+`/simulator` uses `src/lib/simulator.ts` for validated equipment, event-aligned
+multi-day dispatch and scenario advice. `Equipment`, `Schedule` and `Results`
+components expose the complete inputs, schedules and outcomes. `simulations`
+in Convex saves complete configuration with optional linked roof snapshots;
+`simulation-project.ts` handles per-user local recovery and explicit handoff.
+See [SIMULATOR.md](SIMULATOR.md) for the dispatch policy and physical limits.
+The planner no longer treats a usage modal as the simulator; it links to the
+dedicated workspace. Mobile planner inputs reuse the full rail in a bottom sheet.
+
 ## State and derivation
 
 ```
@@ -101,7 +112,8 @@ resource usage or rendered appearance. Do not claim those gaps are closed.
 
 ## Routes
 
-`/` is public; landing CTAs lead into `/auth?returnTo=/dashboard` or the protected
-planner. `RequireAuth` preserves intended destination; `/auth` falls back to
-`/dashboard`. Keep the existing providers and auth configuration intact. The
-first-class simulator and comparison workspace are upcoming, not existing routes.
+`/` is public and demonstrates both tools. CTAs use `/auth?returnTo=/simulator`
+or the protected planner. `/simulator` and `/dashboard` use `RequireAuth` with
+immediate signed-out redirect, preserving the intended destination. `/auth`
+falls back to `/simulator`. Providers and auth configuration are preserved.
+Simulator comparisons are a dedicated workspace view, not a separate route.

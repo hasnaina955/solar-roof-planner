@@ -1,8 +1,25 @@
 # Roadmap and current status
 
-Helio is a 3D planning foundation with a household energy estimator. It is not
-yet the requested multi-appliance operational simulator. Keep the existing
-Three.js/React/Convex stack and evolve it into two equal tools sharing projects.
+Helio now has a dedicated India-focused operational usage simulator and the
+existing 3D planner. The stack and renderer are preserved. Domain reference
+checks pass; browser, device and physical validation remain outstanding.
+
+## Latest implementation
+
+- Custom panels, bank topology/Ah/chemistry/current/reserve/rate penalty and
+  inverter VA/watts/surge/DC-voltage inputs.
+- Multi-window/duty-cycle loads, explicit startup/continuous/source limits,
+  priority whole-load shedding, multi-day SOC and IST power cuts.
+- Off-grid, hybrid mains-bypass and grid-tied anti-islanding policies.
+- Responsive standalone equipment/schedule/results/compare workspace and
+  a redesigned simulator-first landing page with two product entry points.
+- Owner-protected full Convex scenario saves, local drafts and baseline compare.
+- Indian-location planner handoff preserves battery/schedules and linked roof;
+  mobile planner exposes all inputs via the same full control rail.
+- New simulator tests alongside existing planner tests. See SIMULATOR.md.
+
+Geometric shading is not yet sent into simulator output. Keep deep 3D editing
+work after simulator/UI workflow verification, as requested.
 
 ## Phase 1 — trust and recovery implementation
 
@@ -37,7 +54,7 @@ external data/convergence validation. No claim of engineering certification.
 Layout corrections change the default module count and outputs relative to old
 saved summaries. Old summaries are retained, not silently rewritten.
 
-## Phase 2 — multi-appliance simulator
+## Phase 2 — simulator validation and refinement
 
 Completion example: two 220 W panels plus a 150 Ah battery and multiple loads.
 Ask for battery voltage, chemistry, usable capacity, starting charge, charge and
@@ -57,8 +74,8 @@ planned array into simulation, and save both parts together. Preserve baseline
 scenarios when comparing alternatives.
 
 On mobile, expose every essential input through accessible sheets/results views.
-Current compact city/totals replacement is still inadequate; this is not fixed by
-Phase 1. Landing should demonstrate both tools only once both actually exist.
+The compact city/totals replacement now opens the full input rail in a bottom
+sheet; dedicated mobile planner results still need work and device verification. Landing should demonstrate both tools only once both actually exist.
 
 ## Phase 4 — planning realism
 
