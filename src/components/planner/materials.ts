@@ -126,6 +126,35 @@ export function makeWallTexture(): THREE.CanvasTexture {
 }
 
 /**
+ * Soft occlusion under a building footprint.
+ *
+ * Painted once and laid flat on the ground. Without it the walls meet the lawn
+ * at a hard line with no darkening in the crease, so the house reads as a model
+ * sitting on a plane rather than a building standing in a garden.
+ */
+export function makeContactShadowTexture(): THREE.CanvasTexture {
+  const S = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, S, S);
+  const gradient = ctx.createRadialGradient(
+    S / 2, S / 2, S * 0.18,
+    S / 2, S / 2, S * 0.5,
+  );
+  gradient.addColorStop(0, "rgba(26, 32, 22, 0.44)");
+  gradient.addColorStop(0.42, "rgba(26, 32, 22, 0.23)");
+  gradient.addColorStop(1, "rgba(26, 32, 22, 0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, S, S);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.userData.shared = true;
+  return texture;
+}
+
+/**
  * Asphalt shingle courses. Four courses of four tabs, offset every other course
  * by half a tab so it tiles seamlessly in both directions.
  */

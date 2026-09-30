@@ -722,6 +722,7 @@ export default function Dashboard() {
               azimuth={azimuth}
               rackTilt={mounting === "racked" ? rackTilt : 0}
               sunDirection={sun.direction}
+              clearness={site.clearness[monthIndex]}
               sunArc={sunArc}
               arcLabels={arcLabels}
               mode={mode}

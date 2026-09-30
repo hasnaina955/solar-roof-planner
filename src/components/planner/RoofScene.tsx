@@ -16,10 +16,11 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Vec3 } from "@/lib/solar";
+import { RAD, clearSkyIrradiance, type Vec3 } from "@/lib/solar";
 import type { Obstacle, Panel, Point2, RoofFrame } from "@/lib/roof";
 import { roofFrame } from "@/lib/roof";
 import {
+  makeContactShadowTexture,
   makePanelTexture,
   makeShingleTexture,
   makeWallTexture,
@@ -41,6 +42,8 @@ interface RoofSceneProps {
   /** Tilt of the modules above the roof plane, degrees. Zero = flush. */
   rackTilt: number;
   sunDirection: Vec3;
+  /** 0..1 cloud transmission for the selected month, from the site preset. */
+  clearness: number;
   sunArc: Vec3[];
   arcLabels: { direction: Vec3; text: string }[];
   mode: SceneMode;
@@ -69,6 +72,7 @@ interface SceneContext {
   roofGroup: THREE.Group;
   pickPlane: THREE.Mesh;
   sunLight: THREE.DirectionalLight;
+  sky: THREE.Mesh;
   sunGroup: THREE.Group;
   hemi: THREE.HemisphereLight;
   mode: SceneMode;
@@ -76,6 +80,7 @@ interface SceneContext {
   panelTexture: THREE.CanvasTexture;
   shingleTexture: THREE.CanvasTexture;
   wallTexture: THREE.CanvasTexture;
+  contactTexture: THREE.CanvasTexture;
   /** Set by the view-preset effect; the render loop tweens the camera to it. */
   cameraGoal: { position: THREE.Vector3; target: THREE.Vector3 } | null;
   /** Module rise-in animation, restarted whenever the layout changes. */
@@ -187,6 +192,65 @@ function disposeObject(root: THREE.Object3D) {
       material.dispose();
     }
   });
+}
+
+/**
+ * The condition the scene lighting was tuned against: a clear-ish summer
+ * noon. Every lighting value below is expressed relative to this, so at this
+ * altitude and clearness the render is identical to a flat constant light and
+ * only moves as the real sky degrades or the sun drops.
+ */
+const REFERENCE_ALTITUDE = 55;
+const REFERENCE_CLEARNESS = 0.62;
+const REFERENCE_DNI = clearSkyIrradiance(
+  REFERENCE_ALTITUDE,
+  REFERENCE_CLEARNESS,
+).dni;
+const REFERENCE_GHI = clearSkyIrradiance(
+  REFERENCE_ALTITUDE,
+  REFERENCE_CLEARNESS,
+).ghi;
+
+const SUN_OVERHEAD = new THREE.Color("#fff0d2");
+const SUN_HORIZON = new THREE.Color("#ff8a35");
+const SKY_NEUTRAL = new THREE.Color("#ffffff");
+const SKY_LOW_SUN = new THREE.Color("#ffc48f");
+/** Matches the horizon band of the sky gradient so distant ground blends in. */
+const FOG_NEUTRAL = new THREE.Color("#c9d4dc");
+const FOG_LOW_SUN = new THREE.Color("#e0b48c");
+const skyColour = new THREE.Color();
+
+function smoothstep(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Sun colour and strength for a given altitude and cloud cover.
+ *
+ * Intensity tracks the same clear-sky model the energy numbers use, so a low
+ * winter sun and an overcast month both visibly dim and redden the scene
+ * instead of the lighting snapping between two fixed values. Normalised
+ * against {@link REFERENCE_DNI}, so the tuned condition is unchanged.
+ */
+function sunLightFor(altitudeDeg: number, clearness: number) {
+  const sky = clearSkyIrradiance(Math.max(altitudeDeg, 0), clearness);
+  const intensity = THREE.MathUtils.clamp(
+    (3 * sky.dni) / REFERENCE_DNI,
+    0,
+    4,
+  );
+  const t = smoothstep(
+    THREE.MathUtils.clamp(altitudeDeg / REFERENCE_ALTITUDE, 0, 1),
+  );
+  skyColour.copy(SUN_HORIZON).lerp(SUN_OVERHEAD, t);
+  // The floor matches the night fill, so crossing the horizon dims the scene
+  // smoothly instead of stepping up into a brighter "night".
+  const ambient = THREE.MathUtils.clamp(
+    0.95 * (sky.ghi / REFERENCE_GHI),
+    0.42,
+    1.25,
+  );
+  return { intensity, ambient, colour: skyColour, warmth: t };
 }
 
 /** Lit fraction -> colour ramp: deep indigo (shaded) through amber (full sun). */
@@ -370,6 +434,7 @@ interface HouseBuildInput {
   normal: THREE.Vector3;
   roofMesh: THREE.Mesh;
   wallTexture: THREE.Texture;
+  contactTexture: THREE.Texture;
 }
 
 /**
@@ -383,6 +448,7 @@ function buildHouse({
   normal,
   roofMesh,
   wallTexture,
+  contactTexture,
 }: HouseBuildInput): THREE.Group {
   const house = new THREE.Group();
 
@@ -447,6 +513,33 @@ function buildHouse({
   walls.castShadow = true;
   walls.receiveShadow = true;
   house.add(walls);
+
+  // Soft occlusion under the footprint. The directional shadow map only covers
+  // the roof, so without this the walls meet the lawn at a hard unshaded line
+  // and the house floats a little above its own plot.
+  const planX = corners.map((c) => c.x);
+  const planZ = corners.map((c) => c.z);
+  const minX = Math.min(...planX);
+  const maxX = Math.max(...planX);
+  const minZ = Math.min(...planZ);
+  const maxZ = Math.max(...planZ);
+  const padX = Math.max(0.9, (maxX - minX) * 0.18);
+  const padZ = Math.max(0.9, (maxZ - minZ) * 0.18);
+  const contact = new THREE.Mesh(
+    new THREE.PlaneGeometry(
+      maxX - minX + padX * 2,
+      maxZ - minZ + padZ * 2,
+    ),
+    new THREE.MeshBasicMaterial({
+      map: contactTexture,
+      transparent: true,
+      depthWrite: false,
+      opacity: 0.9,
+    }),
+  );
+  contact.rotation.x = -Math.PI / 2;
+  contact.position.set((minX + maxX) / 2, 0.02, (minZ + maxZ) / 2);
+  house.add(contact);
 
   // Windows and a door give the walls a sense of scale.
   const frameMaterial = new THREE.MeshStandardMaterial({
@@ -562,6 +655,7 @@ export function RoofScene(props: RoofSceneProps) {
     azimuth,
     rackTilt,
     sunDirection,
+    clearness,
     sunArc,
     arcLabels,
     mode,
@@ -631,7 +725,9 @@ export function RoofScene(props: RoofSceneProps) {
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog("#cfdae4", 70, 210);
+    // Horizon colour of the sky gradient, so the far edge of the plot dissolves
+    // into the sky instead of into a slightly different grey.
+    scene.fog = new THREE.Fog(FOG_NEUTRAL.getHex(), 70, 210);
 
     const camera = new THREE.PerspectiveCamera(
       42,
@@ -793,6 +889,7 @@ export function RoofScene(props: RoofSceneProps) {
       roofGroup,
       pickPlane,
       sunLight,
+      sky,
       sunGroup,
       hemi,
       mode,
@@ -800,6 +897,7 @@ export function RoofScene(props: RoofSceneProps) {
       panelTexture: makePanelTexture(),
       shingleTexture: makeShingleTexture(),
       wallTexture: makeWallTexture(),
+      contactTexture: makeContactShadowTexture(),
       cameraGoal: null,
       build: null,
       framesMesh: null,
@@ -808,6 +906,7 @@ export function RoofScene(props: RoofSceneProps) {
     context.panelTexture.anisotropy = Math.min(8, maxAnisotropy);
     context.shingleTexture.anisotropy = Math.min(8, maxAnisotropy);
     context.wallTexture.anisotropy = Math.min(8, maxAnisotropy);
+    context.contactTexture.anisotropy = Math.min(8, maxAnisotropy);
     sceneRef.current = context;
     setReady(true);
 
@@ -1052,6 +1151,7 @@ export function RoofScene(props: RoofSceneProps) {
       normal: worldNormal,
       roofMesh,
       wallTexture: ctx.wallTexture,
+      contactTexture: ctx.contactTexture,
     });
     scene.add(house);
 
@@ -1469,22 +1569,41 @@ export function RoofScene(props: RoofSceneProps) {
     if (!ctx || !ready) return;
 
     const dir = new THREE.Vector3(sunDirection.x, sunDirection.y, sunDirection.z);
+    const altitudeDeg =
+      Math.asin(THREE.MathUtils.clamp(sunDirection.y, -1, 1)) * RAD;
+    const { intensity, ambient, colour, warmth } = sunLightFor(
+      altitudeDeg,
+      clearness,
+    );
     const isUp = sunDirection.y > -0.05;
     ctx.sunLight.position.copy(dir).multiplyScalar(80);
-    ctx.sunLight.intensity = isUp ? 3 : 0.02;
-    ctx.hemi.intensity = isUp ? 0.95 : 0.42;
+    ctx.sunLight.intensity = isUp ? intensity : 0.02;
+    ctx.sunLight.color.copy(colour);
+    ctx.hemi.intensity = isUp ? ambient : 0.42;
 
+    // Warm the whole scene towards sunset, not just the light. The sky dome
+    // takes a tint multiplier over its gradient and the fog is pulled to the
+    // same warm horizon so the two never disagree.
+    const skyMaterial = ctx.sky.material as THREE.MeshBasicMaterial;
+    skyMaterial.color.copy(SKY_NEUTRAL).lerp(SKY_LOW_SUN, 1 - warmth);
+    const fog = ctx.scene.fog as THREE.Fog | null;
+    if (fog) fog.color.copy(FOG_NEUTRAL).lerp(FOG_LOW_SUN, 1 - warmth);
+
+    // Cloud cover swallows the disc, so shrink it rather than only dimming.
+    const sunScale = 0.55 + 0.45 * THREE.MathUtils.clamp(clearness, 0, 1);
     const marker = sunMarkerRef.current;
     const halo = sunHaloRef.current;
     if (marker) {
       marker.visible = isUp;
       marker.position.copy(dir).multiplyScalar(SUN_RADIUS);
+      marker.scale.setScalar(sunScale);
     }
     if (halo) {
       halo.visible = isUp;
       halo.position.copy(dir).multiplyScalar(SUN_RADIUS);
+      halo.scale.setScalar(11 * sunScale);
     }
-  }, [sunDirection, ready]);
+  }, [sunDirection, clearness, ready]);
 
   const cursorClass =
     mode === "draw"
