@@ -75,8 +75,6 @@ export function roofFrame(tiltDeg: number, azimuthDeg: number): RoofFrame {
   const sa = Math.sin(az);
   const ca = Math.cos(az);
 
-  // Downhill (facing) horizontal direction
-  const f: Vec3 = { x: sa, y: 0, z: -ca };
   return {
     // Along the eaves, horizontal and orthogonal to the facing direction.
     eaves: { x: ca, y: 0, z: sa },
@@ -357,9 +355,8 @@ const FLUSH_ROW_GAP = 0.04;
  *
  * Flush modules are coplanar with the roof, so they cannot shade one another
  * and rows are simply stacked with a small access gap. Racked modules stand
- * above the roof, so the row pitch comes from the winter design day:
- * pitch = L * (1 + tan(alpha) / tan(beta)), with beta the tilt of the module
- * surface itself.
+ * above the roof. Project the high edge's shadow onto the sloped roof,
+ * using the hemisphere's winter-solstice noon as the design condition.
  */
 export function designRowPitch(
   moduleAlongSlope: number,
@@ -384,15 +381,17 @@ export function designRowPitch(
       rowsCanShade: false,
     };
   }
-  const moduleTilt = Math.min(tilt + rackTilt, 70);
+  const effectiveRack = Math.max(0, Math.min(rackTilt, 70 - tilt));
+  const moduleTilt = tilt + effectiveRack;
   const designAltitude = winterSolsticeNoonAltitude(latitude, azimuth);
-  const pitch = requiredRowPitch(moduleAlongSlope, moduleTilt, designAltitude);
+  const footprint = moduleAlongSlope * Math.cos(effectiveRack * DEG);
+  const pitch = requiredRowPitch(moduleAlongSlope, moduleTilt, designAltitude, tilt);
   return {
-    pitch: Math.max(pitch, moduleAlongSlope + 0.05),
+    pitch: Math.max(pitch, footprint + 0.05),
     designAltitude,
     moduleTilt,
-    moduleHeight: moduleAlongSlope * Math.sin(rackTilt * DEG),
-    rowsCanShade: true,
+    moduleHeight: moduleAlongSlope * Math.sin(effectiveRack * DEG),
+    rowsCanShade: effectiveRack > 0,
   };
 }
 
@@ -450,8 +449,9 @@ export function layoutPanels(params: LayoutParams): LayoutResult {
   const step = moduleAlongEaves + gap;
   let rowIndex = 0;
 
-  for (let y = 0; y + moduleAlongSlope <= bounds.maxY; y += pitch, rowIndex++) {
-    const centreY = y + moduleAlongSlope / 2;
+  const footprint = Math.sqrt(Math.max(0, moduleAlongSlope ** 2 - moduleHeight ** 2));
+  for (let y = bounds.minY + setback; y + footprint <= bounds.maxY - setback; y += pitch, rowIndex++) {
+    const centreY = y + footprint / 2;
     const span = sliceSpan(polygon, centreY);
     if (!span) continue;
     const [spanMin, spanMax] = span;
@@ -464,7 +464,7 @@ export function layoutPanels(params: LayoutParams): LayoutResult {
         x,
         y,
         w: moduleAlongEaves,
-        h: moduleAlongSlope,
+        h: footprint,
       };
       if (!rectFitsPolygon(polygon, rect, 0.04)) continue;
       const clashes = obstacles.some(
@@ -478,7 +478,8 @@ export function layoutPanels(params: LayoutParams): LayoutResult {
         x: rect.x,
         y: rect.y,
         w: rect.w,
-        h: rect.h,
+        // h is the physical module dimension, not its roof projection.
+        h: moduleAlongSlope,
         row: rowIndex,
         column: columnIndex,
         shade: 0,
@@ -506,103 +507,80 @@ export function layoutPanels(params: LayoutParams): LayoutResult {
 const SAMPLE_COLS = 5;
 const SAMPLE_ROWS = 5;
 
+/** Ray/box intersection in roof coordinates; vents use conservative boxes. */
+function rayHitsObstacle(p: Vec3, d: Vec3, obstacle: Obstacle): boolean {
+  let near = 0;
+  let far = Infinity;
+  const bounds = [
+    [p.x, d.x, obstacle.x, obstacle.x + obstacle.w],
+    [p.y, d.y, obstacle.y, obstacle.y + obstacle.h],
+    [p.z, d.z, 0, obstacle.height],
+  ];
+  for (const [origin, direction, min, max] of bounds) {
+    if (Math.abs(direction) < 1e-9) {
+      if (origin < min || origin > max) return false;
+      continue;
+    }
+    const a = (min - origin) / direction;
+    const b = (max - origin) / direction;
+    near = Math.max(near, Math.min(a, b));
+    far = Math.min(far, Math.max(a, b));
+    if (near > far) return false;
+  }
+  return far > 1e-6;
+}
+
 /**
- * Shade fraction per panel for one instant.
- *
- * Two shadow sources are resolved geometrically:
- *  - roof obstructions (vents, tanks), whose 3D box corners are projected
- *    along the sun vector onto the roof plane and hulled;
- *  - the modules themselves, but only when they actually stand above the roof
- *    on a rack. A flush module is coplanar with the roof and casts nothing.
- *
- * Both use the same result a ray tracer would: exact convex geometry, sampled
- * on a 5x5 grid inside each module.
+ * Beam shadow fraction sampled at 5×5 points on each actual module surface.
+ * Rays toward the sun intersect vent boxes and other tilted module planes.
+ * Area sampling is approximate; thin shadows may fall between sample points.
  */
 export function computeShading(
   panels: Panel[],
   obstacles: Obstacle[],
   frame: RoofFrame,
-  /** Height of a module's top edge above the roof plane, metres. */
   moduleHeight: number,
-  /** Whether modules can shade the row in front of them. */
   rowsCanShade: boolean,
   sunWorld: Vec3,
 ): number[] {
   const local = toLocalDirection(sunWorld, frame);
-  // Behind the roof plane there is no beam component at all.
-  if (local.z <= 0.01) return panels.map(() => 1);
-
-  const shiftX = (-moduleHeight * local.x) / local.z;
-  const shiftY = (-moduleHeight * local.y) / local.z;
-
-  // Obstacle shadow hulls, in roof local 2D.
-  const obstacleShadows: Point2[][] = obstacles
-    .filter((o) => o.height > 0.05)
-    .map((o) => {
-      const corners: Point2[] = [
-        { x: o.x, y: o.y },
-        { x: o.x + o.w, y: o.y },
-        { x: o.x + o.w, y: o.y + o.h },
-        { x: o.x, y: o.y + o.h },
-      ];
-      const projected = corners.flatMap((c) => [
-        c,
-        {
-          x: c.x - (o.height * local.x) / local.z,
-          y: c.y - (o.height * local.y) / local.z,
-        },
-      ]);
-      return convexHull(projected);
-    });
-
-  // A module can only shadow a row a little way up-slope of it.
-  const maxShadowReach = Math.abs(shiftY) * 3 + 0.2;
-
-  const cellW = 1 / SAMPLE_COLS;
-  const cellH = 1 / SAMPLE_ROWS;
-  const shaded = new Array(panels.length).fill(0);
-
-  panels.forEach((panel, index) => {
-    let shadedCount = 0;
+  const height = rowsCanShade ? moduleHeight : 0;
+  const standoff = 0.05; // Same low-edge height as RoofScene.
+  return panels.map((panel, index) => {
+    const footprint = Math.sqrt(Math.max(1e-9, panel.h ** 2 - height ** 2));
+    const slope = height / footprint;
+    // Dot with the MODULE normal, not the roof normal.
+    if (local.z - slope * local.y <= 0) return 1;
+    let shaded = 0;
     for (let r = 0; r < SAMPLE_ROWS; r++) {
       for (let c = 0; c < SAMPLE_COLS; c++) {
-        const px = panel.x + (c + 0.5) * cellW * panel.w;
-        const py = panel.y + (r + 0.5) * cellH * panel.h;
-        const point = { x: px, y: py };
-
-        let inShadow = obstacleShadows.some((shadow) =>
-          pointInPolygon(point, shadow),
-        );
-
-        if (!inShadow && rowsCanShade && moduleHeight > 0.02) {
-          for (const other of panels) {
-            const dy = other.y - panel.y;
-            if (dy <= 0.01 || dy > maxShadowReach) continue;
-            const shadowRect: Rect2 = {
-              x: other.x + shiftX,
-              y: other.y + shiftY,
-              w: other.w,
-              h: other.h,
-            };
-            if (
-              px >= shadowRect.x &&
-              px <= shadowRect.x + shadowRect.w &&
-              py >= shadowRect.y &&
-              py <= shadowRect.y + shadowRect.h
-            ) {
-              inShadow = true;
-              break;
-            }
-          }
+        const v = (r + 0.5) / SAMPLE_ROWS;
+        const p = {
+          x: panel.x + ((c + 0.5) / SAMPLE_COLS) * panel.w,
+          y: panel.y + v * footprint,
+          z: standoff + v * height,
+        };
+        let blocked = obstacles.some((o) => rayHitsObstacle(p, local, o));
+        if (!blocked && rowsCanShade) {
+          blocked = panels.some((other, otherIndex) => {
+            if (index === otherIndex) return false;
+            const otherFootprint = Math.sqrt(Math.max(1e-9, other.h ** 2 - height ** 2));
+            const otherSlope = height / otherFootprint;
+            const denominator = local.z - otherSlope * local.y;
+            if (Math.abs(denominator) < 1e-9) return false;
+            const t = (standoff + (p.y - other.y) * otherSlope - p.z) / denominator;
+            if (t <= 1e-6) return false;
+            const x = p.x + t * local.x;
+            const y = p.y + t * local.y;
+            return x >= other.x && x <= other.x + other.w &&
+              y >= other.y && y <= other.y + otherFootprint;
+          });
         }
-
-        if (inShadow) shadedCount++;
+        if (blocked) shaded++;
       }
     }
-    shaded[index] = shadedCount / (SAMPLE_COLS * SAMPLE_ROWS);
+    return shaded / (SAMPLE_COLS * SAMPLE_ROWS);
   });
-
-  return shaded;
 }
 
 /* ------------------------------------------------------------------ *
@@ -610,24 +588,21 @@ export function computeShading(
  * ------------------------------------------------------------------ */
 
 /**
- * A representative day per month. The shadow geometry moves with the solar
- * declination, so twelve days spread through the year describe the whole year
- * to within a couple of percent — far better than extrapolating a single
- * instant across all 365 days.
+ * One representative day per month. Interpolation is an approximation, not
+ * an established error bound; annual accuracy needs external reference data.
  */
 const MONTH_SAMPLE_DOY = [15, 46, 74, 105, 135, 166, 196, 227, 257, 288, 318, 349];
 
-/** Hourly shading samples spanning 06:00 to 18:00 local clock. */
-const HOUR_SAMPLE_FIRST = 360;
-const HOUR_SAMPLE_COUNT = 13;
+/** Hourly samples covering the full local day, including early/late sun. */
+const HOUR_SAMPLE_FIRST = 0;
+const HOUR_SAMPLE_COUNT = 25;
 const HOUR_SAMPLE_STEP = 60;
 
 export interface ShadingField {
   /**
    * Fraction of the array in shadow at a day-of-year and local clock time,
-   * linearly interpolated between the sampled months and hours. Clamped at the
-   * ends of the sampled hour range, which only matters at high latitudes in
-   * midsummer when the sun is still up outside 06:00–18:00.
+   * linearly interpolated between representative months and full-day hours.
+   * Rapidly moving or narrow shadows need finer sampling for accuracy.
    */
   at(doy: number, minutes: number): number;
 }
@@ -742,8 +717,8 @@ export interface SitePreset {
 }
 
 /**
- * Monthly clearness and temperature figures are typical public climate
- * normals (TMY-style) for each city, rounded to two decimals.
+ * Illustrative monthly clearness and temperature presets. These are not a
+ * sourced TMY dataset and must not be presented as measured historical climate.
  */
 export const SITE_PRESETS: SitePreset[] = [
   {

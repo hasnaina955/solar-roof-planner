@@ -1,131 +1,107 @@
 # Architecture
 
-## The shape of the app
+Keep the existing React/Vite provider tree, Convex backend and imperative three.js
+renderer. The domain calculations live outside rendering, so they can be tested
+without a WebGL context. `RoofScene` also calls the shared irradiance model for
+art-directed lighting; it does not own layout or production calculations.
+
+## State and derivation
 
 ```
-React page (Dashboard)
-  ├── useMemo chain: design → geometry → shading → energy
-  ├── Convex queries/mutations for saved designs
-  └── <RoofScene> — imperative three.js, driven by props
+Dashboard (auth user gate, keyed by user id)
+  └─ Planner
+       ├─ useDesignHistory → reducer-owned design inputs
+       ├─ date/time state → sun, not annual integration dependencies
+       ├─ memoized geometry/shading/power
+       ├─ Convex query/mutations for saved projects
+       └─ RoofScene, control rail, insight rail, usage estimator
 ```
 
-The split that matters: **every number the UI shows is computed in `src/lib`**
-(`solar.ts`, `roof.ts`, `appliances.ts`) and handed to the scene as plain data.
-`RoofScene.tsx` never computes physics. It only draws what it is given. That is
-what makes the engine testable in Node — see `scripts/`.
-
-## Module map
-
-| File | Responsibility |
-| --- | --- |
-| `src/lib/solar.ts` | NOAA solar position, clear-sky irradiance, transposition, PV power, annual integration |
-| `src/lib/roof.ts` | Roof frames, 2D polygon maths, the layout solver, module-level shading, site and module presets |
-| `src/lib/appliances.ts` | 22 appliance presets in 6 categories, household load summary |
-| `src/convex/schema.ts` | Auth tables plus the `designs` table |
-| `src/convex/designs.ts` | Save / list / load / delete saved designs |
-| `src/pages/Dashboard.tsx` | Planner shell. Owns all design state and the derivation chain |
-| `src/components/planner/RoofScene.tsx` | The three.js scene: roof, house, modules, sun, scenery, camera |
-| `src/components/planner/materials.ts` | Procedural canvas textures (panel, shingle, wall, contact shadow) |
-
-## The derivation chain
-
-`Dashboard.tsx` builds this with `useMemo`, in order. Each stage depends only on
-the ones above it:
+`src/lib/design-history.ts` is the pure action reducer; its hook is only a React
+adapter. All design edits use patches. Module preset selection changes ID and
+watts atomically, avoiding an effect that overwrites restored custom watts.
+Only repeated changes to the **same scalar** within 600 ms coalesce. First edits
+are always undoable, divergent edits clear redo, no-op edits preserve redo, and
+loading a project replaces both state and history. Native text editing is not
+intercepted by planner undo shortcuts. History retains 100 snapshots.
 
 ```
-design state          siteId, moduleId, tilt, azimuth, orientation, mounting,
-                      rackTilt, setback, polygon, obstacles, appliances,
-                      panelLimit, moduleWatts
-  │
-  ├─ frame            roofFrame(tilt, azimuth) → the roof-plane basis
-  ├─ layout           layoutPanels(...) → panels, row pitch, module height
-  ├─ installedPanels  the first `panelCount` of layout.panels
-  ├─ system           SystemSpec for the energy model
-  ├─ date / sun       solarPosition(...) at the scrubbed minute
-  ├─ shades           computeShading(...) — instantaneous, for the live view
-  ├─ derate           1 − mean(shades) — live beam transmission only
-  ├─ annualShading    buildShadingField(...) — the seasonal grid
-  ├─ shadeAt          (date, minutes) → annualShading.at(...)
-  └─ energy           annualEnergy(system, count, tilt, az, shadeAt)
+design → roofFrame(roof tilt, azimuth)
+       → layoutPanels → moduleTilt, height, pitch, projected footprints
+       → installedPanels → custom module watts → SystemSpec
+       → module surface { tilt: layout.moduleTilt, azimuth }
+       → seasonal shadow field → annualEnergy
+clock/date → solarPosition → instantaneous shadows → live AC output
+selected date + seasonal field → dailyProfile
 ```
 
-### The distinction that matters
+Annual integration depends on the module surface and seasonal lookup, never on
+live `derate`, date, minutes, or playback state. `trust.test.ts` contains source-AST
+guards for this wiring; it does not simulate a mounted dashboard.
 
-`derate` and `annualShading` answer different questions and must not be mixed.
+## Complete project persistence
 
-- **`derate`** is instantaneous. It drives the live watt readout and the
-  heat-map colours, and it *should* change as you scrub the sun.
-- **`annualShading`** is a seasonal grid — one representative day per month,
-  sampled hourly — built once per design change. The annual integration looks
-  it up per timestep.
+`src/lib/project.ts` defines a Zod-validated `PlannerProject`, version 1. It contains
+all editable model inputs: site/module IDs, roof geometry, obstacles, orientation,
+mounting/rack angle, setbacks, maximum/null or explicit panel limit, custom watts,
+appliances and selected date/time. Camera, heatmap visibility, draft tracing and
+playback are ephemeral display state and are intentionally excluded.
 
-When the annual figure was wired to `derate`, the headline kWh moved while you
-dragged the clock, and a 35,040-step integration ran on every animation frame.
-Both are fixed; `scripts/verify-shading.ts` exists to stop them coming back.
+`src/convex/project.ts` provides the shared Convex structural validator. New saves
+require the complete snapshot and are also checked against the domain validator.
+The `designs` table keeps the project optional to allow existing legacy documents;
+owner checks remain enforced on list/save/delete. Existing top-level geometry and
+summary fields remain for comparison and backward compatibility.
+
+Loading a new project replaces its configuration exactly. Old saves restore the
+information actually stored, use an explicit panel-count limit, and warn about
+missing mounting/appliances. They cannot recover information never persisted.
+Summary outputs reflect the model at save time; future model or preset changes
+can change recomputed results. IDs reference current immutable-in-code presets,
+not a separately versioned climate/equipment dataset.
+
+Local recovery uses `helio:project:v1:<user-id>`. A keyed planner is initialized
+from that user's validated local draft, preventing state crossover on account
+switch. Changes are written after a 300 ms debounce, on pagehide, and on unmount;
+playback is not resumed. Corrupt/unknown versions fall back safely, storage quota
+errors do not crash the app, and unavailable storage prompts a cloud-save warning.
+Local storage is readable by this origin, not a secret store or cross-device backup.
 
 ## Coordinate conventions
 
-This is the part that generates bugs, so it is stated in the header of
-`RoofScene.tsx` as well.
+World (right-handed): +X east, +Y up, +Z south. North is −Z; azimuth clockwise
+from north.
 
-**World frame** (right-handed, used by the physics):
+Roof basis (left-handed): +X eaves, +Y upslope, +Z roof normal. Use this basis for
+point transforms, never `setFromRotationMatrix()` to extract a quaternion.
+Polygon dimensions/areas are roof-surface coordinates. Racked panel `h` remains
+physical length while packing uses `h cos(effective rack angle)`.
 
-```
-+X = East,  +Y = up (zenith),  +Z = South
-```
+Panels pivot on the low edge, 0.05 m above the roof. Effective rack tilt is capped
+so module surface tilt is at most 70°. Renderer, row pitch, sampled ray shadows
+and energy use the same effective tilt. Row pitch comes from a roof-coordinate
+shadow projection; see [PHYSICS.md](PHYSICS.md).
 
-So North is −Z. Azimuths are degrees clockwise from North, matching
-PVsyst / PVGIS / NREL.
-
-**Roof local frame** (left-handed, used by everything drawn on the roof):
-
-```
-+X = along the eaves, horizontal
-+Y = up the slope, in the plane of the roof
-+Z = along the roof normal, upwards
-```
-
-`roofGroup` carries the roof-plane basis matrix, so its children are in roof
-local coordinates. Because the basis is left-handed (det = −1) it is valid for
-*transforms* and invalid for extracting a rotation — nothing calls
-`setFromRotationMatrix()` on it.
-
-Polygons are drawn in roof local 2D, which means **polygon areas are true roof
-surface areas**. No `cos(tilt)` correction is needed anywhere in the layout
-solver, and panel counts and coverage percentages are honest.
-
-Two conversions matter and are easy to get wrong:
-
-- **Plan offset.** `planX = eaves.x * p.x + (upSlope.x / cos(tilt)) * p.y` — the
-  up-slope distance is converted to its horizontal projection before being used
-  as a plan offset.
-- **Module placement.** A flush module sits 0.05 m proud of the roof. A racked
-  one pivots on its **low edge** about the eaves axis, so it can never swing
-  down through the roof surface.
+The renderer uses an additional house/scene centering offset. Dividing the
+upslope horizontal direction by `cos(tilt)` gives a unit horizontal direction;
+it is **not** the horizontal projection of a roof-plane distance. That offset
+and framing still warrant visual review.
 
 ## Scene lifecycle
 
-`RoofScene` has one mount-once effect and several rebuild effects. It is
-imperative, so this matters:
+`RoofScene` owns the WebGL renderer, controls and requestAnimationFrame loop.
+Geometry is rebuilt/disposed on design changes; instance colors update separately.
+Shared procedural textures are created at bootstrap and flagged
+`userData.shared`, so geometry rebuilds skip their disposal. A sky/ground PMREM
+probe supplies a static environment map.
 
-- **Textures** (panel, shingle, wall, contact shadow) are created once in the
-  bootstrap effect, stored on `SceneContext`, and flagged
-  `userData.shared = true` so `disposeObject()` does not free them on rebuild.
-- **Geometry** (roof slab, house, modules, obstructions) is rebuilt whenever the
-  design changes, and disposed on cleanup.
-- **Instance colours** (heat map) are updated without a geometry rebuild —
-  that effect writes `setColorAt` and sets `needsUpdate` only.
-- **The sun marker** moves every sweep frame via props; the sun *arc* is
-  rebuilt only when the day or site changes.
+Outstanding lifecycle audit: explicit shared texture disposal, retained PMREM
+render-target disposal and teardown ordering. Numeric checks do not verify GPU
+resource usage or rendered appearance. Do not claim those gaps are closed.
 
-The render loop is started once and never torn down. It eases the camera toward
-`ctx.cameraGoal` when a view preset changes, runs the module rise-in animation
-against `ctx.build`, then calls `controls.update()` and renders.
+## Routes
 
-## Environment map
-
-A throwaway sky-and-ground scene is baked through `PMREMGenerator` into
-`scene.environment`. This is not decoration: without it every metallic
-material — module frames, vent stacks, window glass — renders as flat black.
-The probe's geometry and materials are traversed and freed manually, because
-the sky texture it shares is still in use by the main sky dome.
+`/` is public; landing CTAs lead into `/auth?returnTo=/dashboard` or the protected
+planner. `RequireAuth` preserves intended destination; `/auth` falls back to
+`/dashboard`. Keep the existing providers and auth configuration intact. The
+first-class simulator and comparison workspace are upcoming, not existing routes.

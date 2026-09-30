@@ -1,6 +1,7 @@
 import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { Infer, v } from "convex/values";
+import { projectValidator } from "./project";
 
 // default user roles. can add / remove based on the project as needed
 export const ROLES = {
@@ -66,6 +67,7 @@ const schema = defineSchema(
       capacityKw: v.number(),
       annualKwh: v.number(),
       specificYield: v.number(),
+      project: v.optional(projectValidator),
       createdAt: v.number(),
     }).index("by_owner", ["owner"]),
 

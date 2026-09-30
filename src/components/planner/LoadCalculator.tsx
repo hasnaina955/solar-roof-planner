@@ -25,8 +25,8 @@ interface LoadCalculatorProps {
   onChange: (appliances: Appliance[]) => void;
   /** Annual solar production, kWh. */
   solarAnnualKwh: number;
-  /** Peak array output, watts AC. */
-  solarPeakWatts: number;
+  /** Inverter AC output ceiling, not instantaneous generation. */
+  inverterWatts: number;
 }
 
 const GROUPS = ["Kitchen", "Comfort", "Laundry", "Electronics", "Outdoor", "Transport"] as const;
@@ -103,12 +103,12 @@ export function LoadCalculator({
   appliances,
   onChange,
   solarAnnualKwh,
-  solarPeakWatts,
+  inverterWatts,
 }: LoadCalculatorProps) {
   const [groupFilter, setGroupFilter] = useState<string>("Kitchen");
   const usage = useMemo(() => summariseUsage(appliances), [appliances]);
   const coverage =
-    usage.annualKwh > 0 ? Math.min(150, (solarAnnualKwh / usage.annualKwh) * 100) : 0;
+    usage.annualKwh > 0 ? (solarAnnualKwh / usage.annualKwh) * 100 : 0;
 
   const update = (id: string, patch: Partial<Appliance>) => {
     onChange(
@@ -147,8 +147,8 @@ export function LoadCalculator({
           unit="kWh"
         />
         <Stat
-          label="Solar covers"
-          value={coverage.toFixed(0)}
+          label="Generation / use"
+          value={usage.annualKwh > 0 ? coverage.toFixed(0) : "—"}
           unit="%"
           hint={`${Math.round(solarAnnualKwh).toLocaleString()} kWh generated`}
         />
@@ -156,7 +156,7 @@ export function LoadCalculator({
           label="Connected load"
           value={(usage.connectedWatts / 1000).toFixed(1)}
           unit="kW"
-          hint="If everything ran at once"
+          hint="Sum of average running draws, not surge power"
         />
       </div>
 
@@ -167,14 +167,15 @@ export function LoadCalculator({
             Solar against your usage
           </span>
           <span className="numeric text-muted-foreground">
-            {coverage.toFixed(0)}% covered
+            {usage.annualKwh > 0 ? `${coverage.toFixed(0)}% annual energy ratio` : "Add usage to compare"}
           </span>
         </div>
         <Progress value={Math.min(100, coverage)} className="h-2" />
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          Array peak is {(solarPeakWatts / 1000).toFixed(2)} kW AC against{" "}
-          {(usage.connectedWatts / 1000).toFixed(1)} kW of connected load — the
-          array runs the whole house except when several heavy appliances overlap.
+          Inverter AC limit: {(inverterWatts / 1000).toFixed(2)} kW. The annual
+          energy ratio does not show loads served or bill savings. This estimator
+          does not model schedules, batteries, startup surges, or simultaneous
+          operation. Actual solar output varies and is zero at night.
         </p>
       </div>
 
@@ -331,8 +332,8 @@ export function LoadCalculator({
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        Wattages are average draw while running, so watts × hours reproduces
-        published consumption figures. Some appliances, like a fridge or a
+        Wattages are illustrative average draws while running; watts × hours
+        estimates consumption, not guaranteed appliance operation. Some appliances, like a fridge or a
         heat pump, cycle on and off but average out to the figure shown.
       </p>
     </div>

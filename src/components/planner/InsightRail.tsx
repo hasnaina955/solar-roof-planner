@@ -15,7 +15,7 @@ import {
   Activity,
   Gauge,
   LayoutGrid,
-  Leaf,
+  Zap,
   Sun,
   TrendingUp,
 } from "lucide-react";
@@ -138,8 +138,7 @@ export function InsightRail(props: InsightRailProps) {
   } = props;
 
   const coverage = roofArea > 0 ? (coveredArea / roofArea) * 100 : 0;
-  const offset = annualUsage > 0 ? Math.min(100, (annualKwh / annualUsage) * 100) : 0;
-  const co2Tonnes = (annualKwh * 0.386) / 1000;
+  const ratio = annualUsage > 0 ? (annualKwh / annualUsage) * 100 : 0;
   const dayTotal = dayCurve.reduce((sum, point) => sum + point.kwh, 0);
   const monthlyData = MONTHS.map((month, index) => ({
     month,
@@ -177,11 +176,11 @@ export function InsightRail(props: InsightRailProps) {
           icon={LayoutGrid}
         />
         <Kpi
-          label="Bill offset"
-          value={offset.toFixed(0)}
+          label="Generation / use"
+          value={annualUsage > 0 ? ratio.toFixed(0) : "—"}
           unit="%"
-          sub={`${co2Tonnes.toFixed(1)} t CO₂ avoided`}
-          icon={Leaf}
+          sub="Annual energy ratio, not savings"
+          icon={Zap}
         />
       </div>
 
@@ -189,7 +188,7 @@ export function InsightRail(props: InsightRailProps) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-              Output right now
+              Output at selected time
             </p>
             <p className="numeric mt-1.5 text-3xl leading-none font-semibold tracking-tight">
               {(liveAcWatts / 1000).toFixed(2)}
@@ -222,7 +221,7 @@ export function InsightRail(props: InsightRailProps) {
 
       <div>
         <SectionTitle hint={`${dayTotal.toFixed(1)} kWh on the selected day`}>
-          Today&rsquo;s production
+          Selected day’s estimate
         </SectionTitle>
         <div className="h-40 w-full">
           <ResponsiveContainer width="100%" height="100%">
@@ -286,7 +285,7 @@ export function InsightRail(props: InsightRailProps) {
       </div>
 
       <div>
-        <SectionTitle hint="Modelled from monthly climate normals">Monthly output</SectionTitle>
+        <SectionTitle hint="Modelled from illustrative monthly climate presets">Monthly output</SectionTitle>
         <div className="h-36 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={monthlyData} margin={{ top: 6, right: 4, bottom: 0, left: -24 }}>
@@ -334,7 +333,7 @@ export function InsightRail(props: InsightRailProps) {
                   icon: LayoutGrid,
                   label: "Row pitch",
                   value: `${rowPitch.toFixed(2)} m`,
-                  hint: `${moduleTilt.toFixed(0)}° module surface, no row shading at the design day`,
+                  hint: `${moduleTilt.toFixed(0)}° module surface; winter-noon spacing estimate, not all-day clearance`,
                 }
               : {
                   icon: LayoutGrid,
@@ -345,8 +344,8 @@ export function InsightRail(props: InsightRailProps) {
             {
               icon: Activity,
               label: "Shading loss",
-              value: `${((1 - shadingDerate) * 100).toFixed(1)}%`,
-              hint: "Module-level, from vents and racked rows",
+              value: `${(shadingDerate * 100).toFixed(1)}%`,
+              hint: "Sampled beam shadow at selected time, not annual loss",
             },
           ].map((row) => (
             <div key={row.label} className="flex items-start gap-3 p-3.5">

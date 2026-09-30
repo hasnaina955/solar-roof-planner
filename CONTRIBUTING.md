@@ -6,20 +6,22 @@
 bun install
 ```
 
-You need a Convex deployment. The one configured in `.env.local` belongs to the
-platform service account, so **for your own account**:
+You need a Convex deployment. The hosted project currently uses the platform's
+service-account deployment. For your own deployment, initialize it on your own
+machine (interactive setup only):
 
 ```bash
 bunx convex dev
 ```
 
-That writes `CONVEX_DEPLOYMENT` to `.env.local` and prints the values to export
-for the deployment:
+That initializes your local deployment configuration. Configure Convex Auth
+keys separately using the Convex Auth setup instructions; these are not all
+created by the plain `convex dev` command:
 
 | Variable | Purpose |
 | --- | --- |
 | `JWT_PRIVATE_KEY` | Signs auth tokens (Convex Auth) |
-| `CONVEX_JWKS` | Public half of that key pair, for verifying them |
+| `JWKS` | Public half of that key pair, for verifying them |
 | `SITE_URL` | Your dev origin, used to build auth callbacks |
 
 The client only needs `VITE_CONVEX_URL`. Never edit `.env` files by hand — use
@@ -38,36 +40,36 @@ secrets.
 | `bun convex dev --once` | Push Convex functions and regenerate `_generated` |
 | `bunx eslint .` | Lint |
 
-**Never run `bun convex dev` without `--once`.** The terminal here is
-non-interactive; the long-running form hangs and leaves codegen incomplete.
+**In the hosted terminal, never run `bun convex dev` without `--once` or launch
+`bun run dev`.** The platform manages both long-running services. The interactive
+setup example above is for your own machine only.
 
-## Verification scripts
-
-Two things in this project are easy to break silently — the annual energy
-figure drifting, and the scene lighting drifting — so both have scripts that
-assert an invariant and exit non-zero on failure.
+## Verification
 
 ```bash
-bunx tsx scripts/verify-shading.ts
-bunx tsx scripts/verify-lighting.ts
+bun test scripts/trust.test.ts
+bun scripts/verify-shading.ts
+bun scripts/verify-lighting.ts
+bun scripts/calibration.ts
 ```
 
-- **`verify-shading.ts`** guards the annual model. The invariant is that the
-  annual figure depends on the design only: it must not move when the
-  time-of-day slider moves. It also checks that shading actually removes energy
-  and that winter row shading is captured. This catches the class of bug where
-  an instantaneous derate gets extrapolated across the year.
-- **`verify-lighting.ts`** guards the scene. The invariant is that at the tuned
-  condition (55° altitude, clearness 0.62) the render is unchanged from the
-  flat constant light it replaced, and that intensity varies monotonically with
-  altitude and cloud cover everywhere, with no NaN and no black or blown-out
-  frame across all twelve sites.
+- **`trust.test.ts`**: independent geometric references, module normals,
+  hemisphere winter, ray intersections, action-based history, validated project
+  serialization and source-AST guards on annual memo dependencies/save wiring.
+- **`verify-shading.ts`**: seasonal samples compared with direct geometry;
+  beam shadows remove energy. This is not a mounted clock-scrub test.
+- **`verify-lighting.ts`**: numeric model calibration/monotonicity/clamps across
+  twelve sites and representative days in every month. It mirrors lighting
+  calculations, not rendered scene behavior or perceptual readability.
+- **`calibration.ts`**: model yields for equator-facing arrays. No external
+  measurements are used; this is a sanity report, not physical validation.
 
-Run both before touching the physics or the scene.
+Browser interactions and visual quality require separate preview/E2E checks.
+Do not claim engineering accuracy or rendered readability from these scripts.
 
 ## Conventions
 
-- **Use `bun`, never `npm`/`yarn`/`pnl`.**
+- **Use `bun`, not another package manager.**
 - **Edit files with the editor tools**, not `sed`, shell redirection or inline
   scripts. Shell-written files can fail to persist through the build state.
 - Pages live in `src/pages`, planner components in `src/components/planner`,

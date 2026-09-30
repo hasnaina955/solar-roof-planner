@@ -40,7 +40,7 @@ export function SavedDesigns({
         <div>
           <h3 className="text-sm font-semibold tracking-tight">Saved options</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Keep a few and compare them side by side.
+            Save layout and usage together. Yields are model estimates.
           </p>
         </div>
         <span className="numeric rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
@@ -103,13 +103,14 @@ export function SavedDesigns({
                       {design.name}
                       {best?._id === design._id && (
                         <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
-                          BEST
+                          TOP YIELD
                         </span>
                       )}
                     </span>
                     <span className="numeric text-[10px] text-muted-foreground">
                       {design.panelCount} panels · {Math.round(design.tilt)}° ·{" "}
                       {Math.round(design.azimuth)}°
+                      {!design.project && " · legacy / partial"}
                     </span>
                   </td>
                   <td className="numeric px-2 py-2 text-right">

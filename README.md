@@ -1,151 +1,85 @@
-# Helio — 3D rooftop solar planner
+# Helio — rooftop solar planning estimates
 
-Trace your roof on a tilted 3D plane, watch modules lay themselves out at a
-spacing that survives the worst day of winter, then sweep the sun across the
-year and see every panel's yield move with it.
+A 3D planner for homeowners exploring panel layouts before speaking to an
+installer. The next product milestone is a first-class multi-appliance Usage
+Simulator; the current usage tool is an **energy estimator**, not that simulator.
 
-Built for homeowners comparing options before they talk to an installer.
+## Current capabilities
 
-## What it does
+- Trace a single roof plane; choose location, pitch, facing, modules and mounting.
+- Automatically place modules around vents with edge setbacks and winter-noon
+  rack spacing. Scrub the sun and inspect sampled module shadows.
+- Estimate instantaneous AC power and monthly/annual energy using solar geometry,
+  illustrative climate presets, temperature derating and inverter clipping.
+- Estimate household consumption from 22 appliance presets.
+- Save complete versioned projects in Convex: geometry, racks, equipment, custom
+  wattage, maximum/limited array mode, appliances, date and time.
+- Recover a local draft after refresh, scoped to the signed-in user.
+- Undo/redo design edits, with repeated edits to the same slider coalesced.
 
-- **Trace your roof** — click the outline on the roof plane. The layout solver
-  reflows the array the moment you close the shape.
-- **See the array** — modules are packed by a real layout algorithm with edge
-  setbacks, vents and obstructions carved out, and inter-row spacing solved
-  rather than guessed.
-- **Watch a real day** — scrub the date and clock time, or play the day as an
-  animation. Shadows sweep across the roof and each module recolours by how
-  much sun it is catching.
-- **Get numbers you can defend** — annual and monthly yield, roof coverage,
-  bill offset, CO₂ avoided, and the shading loss that got you there.
-- **Size it yourself** — set module output and install any number of modules up
-  to what the roof holds.
-- **Model your own usage** — build your household from 22 appliance presets to
-  see what each one contributes and how much of it the array covers.
-- **Compare options** — save layouts and rank them on capacity and specific
-  yield.
+“Generation / use” is an annual energy ratio, **not** load served or bill savings.
+The inverter limit is an equipment assumption, **not** the power available at any
+particular time. There is no battery dispatch, scheduling, surge, tariff or
+self-consumption model yet.
 
-## The model
+## Stack and architecture
 
-The point of this app is that the geometry is honest. All of it lives in
-`src/lib/solar.ts` and `src/lib/roof.ts` and is independent of React and three.js.
+Bun, Vite, React 19, TypeScript, Tailwind 4, shadcn/ui, Framer Motion, Recharts,
+imperative three.js, Convex and Convex Auth. Existing providers and protected
+routes are retained: `/` → `/auth` → `/dashboard`.
 
-**Solar position** — NOAA Solar Calculator equations (fractional year,
-equation of time, declination) giving altitude and azimuth for any minute of any
-day at any site.
+| Module | Responsibility |
+| --- | --- |
+| `src/lib/solar.ts` | Solar position, irradiance, PV power, annual integration |
+| `src/lib/roof.ts` | Roof geometry, layout, sampled ray shadows, presets |
+| `src/lib/appliances.ts` | Average daily household energy estimates |
+| `src/lib/project.ts` | Validated versioned project and local draft serialization |
+| `src/lib/design-history.ts` | Pure action-based undo/redo reducer |
+| `src/hooks/use-design-history.ts` | React state adapter |
+| `src/pages/Dashboard.tsx` | Planner and memoized derivation chain |
+| `src/components/planner/RoofScene.tsx` | Existing three.js renderer |
+| `src/convex/designs.ts` | Owner-protected project save/list/delete |
 
-**Irradiance** — Kasten–Young relative air mass, Hottel/Meinel beam attenuation,
-a diffuse component that survives cloud cover, and an isotropic-sky
-transposition with ground reflection onto the tilted plane:
+## Development and checks
 
-```
-POA = DNI·cos(θ) + DHI·(1 + cos β)/2 + GHI·ρ·(1 − cos β)/2
-```
-
-**Power** — nameplate is defined at 1000 W/m², so plane-of-array irradiance
-scaled to that reference times nameplate watts times module count gives DC
-power, derated by cell temperature (NOCT model) and system losses, then clipped
-at the inverter. A full year is integrated at 15-minute resolution.
-
-**Row pitch** — flush modules are coplanar with the roof and cannot shade one
-another, so rows stack with an access gap. Racked modules stand above the roof
-and get real spacing from the winter-solstice profile angle:
-
-```
-pitch = L · (1 + tan α / tan β)
-```
-
-where β is the module surface tilt and α the profile altitude at the design
-day. This is the single biggest driver of how many modules a roof holds.
-
-**Shading** — resolved geometrically: obstruction box corners are projected
-along the sun vector onto the roof plane and hulled, racked rows project as
-parallelograms, and both are tested against a 5×5 sample grid inside every
-module. Only the beam component is removed by a shadow, so diffuse and
-ground-reflected light survive.
-
-For the live view the shading is resolved for the instant on screen. For the
-annual figure it is resolved on a seasonal grid instead: one representative
-day per month, sampled hourly from 06:00 to 18:00 and linearly interpolated.
-The annual integration then looks up the shaded fraction at each of its 15-minute
-timesteps and removes that much beam, so winter row shading and long noon
-shadows are accounted for in the year's total. Because the field depends only
-on the design — roof, modules, obstructions, tilt, azimuth — the annual kWh never
-moves when you scrub the day.
-
-## Architecture
-
-```
-src/lib/solar.ts          solar geometry, irradiance, PV energy model
-src/lib/roof.ts           roof frames, layout solver, shading, site presets
-src/lib/appliances.ts     appliance library and household load model
-src/components/planner/
-  RoofScene.tsx           three.js scene: roof, house, modules, sun, shadows
-  ControlRail.tsx         design inputs
-  InsightRail.tsx         KPIs and production charts
-  TimeBar.tsx             date and time scrubber
-  LoadCalculator.tsx      appliance usage builder
-  SavedDesigns.tsx        save/load/compare layouts
-src/pages/Landing.tsx     marketing page
-src/pages/Dashboard.tsx   the planner
-src/convex/               Convex backend (designs table, auth)
-```
-
-Stack: Vite, React 19, TypeScript, Tailwind v4, shadcn/ui, Framer Motion,
-three.js, Convex + Convex Auth, Recharts.
-
-## Running it
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup. The hosted platform manages
+servers; do not launch another dev server there.
 
 ```bash
-bun install
-bun convex dev --once   # codegen the Convex client
-bun run dev
+bun convex dev --once && bun tsc -b --noEmit
+bun test scripts/trust.test.ts
+bun scripts/verify-shading.ts
+bun scripts/verify-lighting.ts
+bun scripts/calibration.ts
 ```
 
-Typecheck with `bun tsc -b --noEmit`. Three scripts guard the parts of this
-project that break silently:
-
-```bash
-bunx tsx scripts/verify-shading.ts   # annual figure must not depend on the clock
-bunx tsx scripts/verify-lighting.ts  # scene lighting stays calibrated and finite
-bunx tsx scripts/calibration.ts      # specific yields per site
-```
+Tests include independent flat/sloped row-spacing references, module normal
+consistency, hemisphere season, sampled ray intersections, history transitions,
+project serialization and source-AST dependency guards. **They are not browser
+interaction, visual, deployment ownership, or measured-yield validation tests.**
 
 ## Documentation
 
-| Document | What is in it |
-| --- | --- |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, commands, and the five things that will bite you |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Module map, the derivation chain, coordinate conventions |
-| [docs/PHYSICS.md](docs/PHYSICS.md) | The energy model, equations, calibration, known limits |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | What is shipped, what is missing, what is next |
+- [Architecture](docs/ARCHITECTURE.md): state, persistence, coordinates, rendering.
+- [Physics and limits](docs/PHYSICS.md): equations, assumptions, reference tests.
+- [Roadmap](docs/ROADMAP.md): trust/recovery work and the two-tool product plan.
 
-## Accuracy and limitations
+## Accuracy and persistence limits
 
-Monthly clearness and temperature figures are typical public climate normals for
-each of the twelve sites, not a live satellite or TMY feed, so treat the output
-as a very good guide rather than a guarantee. Annual shading is sampled on twelve
-representative days rather than recomputed for all 35,040 timesteps, and the
-hourly sampling window is clamped outside 06:00–18:00, which only matters at high
-latitudes in midsummer. The roof is a single tilted plane — hips, valleys and
-dormers are not modelled. A site survey still rules.
+Outputs are planning estimates, not certified engineering or installation
+sign-off. Climate values are illustrative monthly presets, not a sourced TMY
+dataset or live forecast. Shadows use 5×5 samples and a 12-day × 25-hour annual
+field; no error bound has been established. One roof plane only; string mismatch,
+weather variability and equipment-specific electrical behavior are not modeled.
 
-## Environment
+Older saved options lack mounting and appliances. Loading one uses explicit
+fallbacks and shows a warning; missing historical information cannot be recovered.
+Local drafts require browser storage and are not a cross-device backup. New
+saved snapshots preserve inputs, but future model/preset changes can change
+recomputed estimates; historical summary values are not recalculated on save-list
+read.
 
-The client needs `VITE_CONVEX_URL` and the Convex deployment needs
-`CONVEX_DEPLOYMENT` plus the auth keys (`JWKS`, `JWT_PRIVATE_KEY`, `SITE_URL`).
-Secrets are held outside the repository; `.gitignore` excludes `.env.local`,
-`node_modules`, `dist` and `src/convex/_generated`.
-
-## Project conventions
-
-- Package manager is **bun**.
-- Pages live in `src/pages`, components in `src/components`, shadcn primitives
-  in `src/components/ui`. Import via the `@/` alias.
-- Convex auth files (`src/convex/auth.ts`, `src/convex/auth.config.ts`,
-  `src/convex/auth/emailOtp.ts`) are fixed — do not modify them. Use the
-  `useAuth` hook on the frontend and protect routes with `RequireAuth`, which
-  preserves the requested path through `/auth?returnTo=...`.
-- Theme tokens live in `src/index.css`; prefer them over hardcoded colours.
-- Express UI state through the existing shadcn components and keep pages
-  responsive.
+The client needs `VITE_CONVEX_URL`. Convex Auth uses `JWKS`, `JWT_PRIVATE_KEY`
+and `SITE_URL` on the deployment. Manage hosted secrets in the Keys UI; never
+commit environment files or hand-edit generated Convex files. Keep existing auth
+providers and `RequireAuth` return-path behavior intact.

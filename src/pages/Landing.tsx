@@ -181,7 +181,7 @@ const FEATURES = [
   {
     icon: Ruler,
     title: "It knows how the panels are mounted",
-    body: "Flush modules lie in the roof plane and cast nothing, so rows pack tight. Racked modules stand above it, and row pitch comes from the winter-solstice result L · (1 + tan α / tan β).",
+    body: "Flush rows pack tightly. Racked rows use a roof-coordinate shadow projection at winter-solstice noon in your hemisphere. Morning and evening shading can still occur.",
   },
   {
     icon: Sun,
@@ -190,13 +190,13 @@ const FEATURES = [
   },
   {
     icon: TrendingUp,
-    title: "Numbers you can defend",
+    title: "Estimates with a visible method",
     body: "NOAA solar geometry, a Kasten–Young clear-sky model, isotropic transposition and cell-temperature derates — integrated over all 365 days.",
   },
   {
     icon: Compass,
-    title: "Twelve cities, honest climate",
-    body: "Monthly clearness and temperature normals for each site, so San Francisco does not quietly look like Phoenix.",
+    title: "Twelve illustrative site presets",
+    body: "Explore how monthly clearness and temperature assumptions change output. Presets are illustrative, not measured weather records.",
   },
   {
     icon: LineChart,
@@ -216,7 +216,7 @@ const STEPS = [
   },
   {
     title: "Read the day and the year",
-    body: "Sweep the sun through the day, then check annual output, bill offset and shading loss.",
+    body: "Sweep the sun through the day, then check estimated annual output and geometric shading.",
   },
 ];
 
@@ -258,7 +258,7 @@ export default function Landing() {
             className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground"
           >
             <Sun className="size-3.5 text-primary" />
-            Accurate enough to sign off on
+            Clear estimates before you commit
           </motion.p>
 
           <motion.h1
@@ -276,10 +276,9 @@ export default function Landing() {
             transition={{ delay: 0.1 }}
             className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground"
           >
-            Trace your roof outline on a 3D plane, watch modules lay themselves
-            out at a spacing that survives the worst day of winter, then sweep
-            the sun across the year. Every number comes out of the same
-            geometry a PV engineer would use.
+            Trace your roof in 3D, explore panel layouts, and watch the sun
+            move across the array. Compare estimated production with your
+            household’s energy use before talking to an installer.
           </motion.p>
 
           <motion.div
@@ -409,7 +408,7 @@ export default function Landing() {
       <section className="border-t border-border bg-muted/30 py-20">
         <div className="mx-auto max-w-6xl px-5">
           <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            What &ldquo;accurate&rdquo; means here
+            How the estimates are calculated
           </h2>
           <div className="mt-10 grid gap-8 md:grid-cols-3">
             {[
@@ -423,7 +422,7 @@ export default function Landing() {
               },
               {
                 title: "Array behaviour",
-                body: "Mounting-aware row spacing, module-level shadow polygons clipped against obstructions, cell-temperature derate and inverter clipping at a realistic DC/AC ratio.",
+                body: "Mounting-aware row spacing, sampled rays against obstructions and module surfaces, cell-temperature derating and inverter clipping with an assumed DC/AC ratio.",
               },
             ].map((item) => (
               <div key={item.title}>
@@ -437,9 +436,10 @@ export default function Landing() {
             ))}
           </div>
           <p className="mt-10 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-            Estimates are modelled from typical monthly climate normals, not a
-            live satellite feed, so treat them as a very good guide rather than
-            a guarantee. A site survey still rules.
+            Outputs use illustrative monthly climate assumptions, not live
+            forecasts or a validated historical dataset. They are planning
+            estimates, not installation sign-off, guaranteed yield, bill savings,
+            or proof that appliances can run. A site survey still rules.
           </p>
         </div>
       </section>

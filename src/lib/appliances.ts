@@ -1,9 +1,9 @@
 /**
  * Household load model.
  *
- * Appliance wattages are *average draw while running*, not nameplate peaks, so
- * that watts × hours reproduces the published annual consumption figures for
- * each appliance. That is what makes the totals line up with a real bill.
+ * Appliance wattages are illustrative average draws while running, not
+ * nameplate peaks or startup surges. Watts × hours estimates consumption;
+ * it cannot determine simultaneous operation or actual bill savings.
  */
 
 export interface Appliance {

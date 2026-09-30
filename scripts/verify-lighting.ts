@@ -1,12 +1,10 @@
 /**
- * Checks the scene lighting model in RoofScene.
+ * Numeric check of a copy of the art-directed scene-lighting equations.
+ * At the reference condition, intensities equal the old constants. This does
+ * not import the rendered scene, verify visual appearance, or prove that the
+ * copied equations remain in sync with RoofScene.
  *
- * The contract: at the tuned condition (REFERENCE_ALTITUDE / REFERENCE_CLEARNESS)
- * the render must be identical to the old flat constant light — intensity 3,
- * ambient 0.95, colour #fff0d2 — and everything else must follow the real
- * clear-sky model monotonically.
- *
- *   bunx tsx scripts/verify-lighting.ts
+ *   bun scripts/verify-lighting.ts
  */
 import { clearSkyIrradiance, solarPosition } from "../src/lib/solar";
 import { SITE_PRESETS } from "../src/lib/roof";
@@ -74,7 +72,7 @@ for (const c of [0.3, 0.4, 0.5, 0.62, 0.7, 0.8]) {
 }
 check("intensity rises as cloud clears", monotone, "monotone across 0.30-0.80");
 
-console.log("\n=== every site, every month, every 15 min of an extreme day ===");
+console.log("\n=== every site, every month, every 15 min of the 15th ===");
 let minI = Infinity;
 let maxI = -Infinity;
 let minA = Infinity;
@@ -82,7 +80,7 @@ let maxA = -Infinity;
 let worst = "";
 let bad = 0;
 for (const site of SITE_PRESETS) {
-  for (const month of [0, 5, 11]) {
+  for (const month of Array.from({ length: 12 }, (_, i) => i)) {
     const date = new Date(Date.UTC(2023, month, 15));
     for (let m = 0; m <= 1440; m += 15) {
       const sun = solarPosition(site.latitude, site.longitude, site.utcOffset, date, m);
@@ -102,12 +100,12 @@ for (const site of SITE_PRESETS) {
 }
 check("no NaN or Infinity anywhere", bad === 0, `${bad} bad samples`);
 check(
-  "dimmest usable daylight still reads",
+  "sampled daylight intensity stays above numeric floor (not a visibility test)",
   minI > 0.25,
   `min intensity ${minI.toFixed(3)} at ${worst}`,
 );
 check(
-  "usable daylight never blows out",
+  "sampled daylight intensity stays within clamp (not an exposure test)",
   maxI <= 4,
   `max intensity ${maxI.toFixed(3)} (clamped ceiling 4)`,
 );

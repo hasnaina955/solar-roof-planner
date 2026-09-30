@@ -339,7 +339,7 @@ export function ControlRail(props: ControlRailProps) {
         hint={
           mounting === "flush"
             ? "Modules lie flat on the roof, so rows cannot shade each other and the array packs densely."
-            : "Modules stand on rails above the roof, so rows need winter-proof spacing."
+            : "Modules stand on rails; spacing is estimated for winter noon, not all-day shade avoidance."
         }
       >
         <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-border bg-secondary/60 p-1">
@@ -363,12 +363,12 @@ export function ControlRail(props: ControlRailProps) {
       {mounting === "racked" && (
         <Field
           label="Rack tilt above roof"
-          value={`${Math.round(rackTilt)}°`}
+          value={`${Math.round(Math.min(rackTilt, 70 - tilt))}° effective`}
         >
           <Slider
-            value={[rackTilt]}
+            value={[Math.min(rackTilt, 70 - tilt)]}
             min={0}
-            max={35}
+            max={Math.min(35, 70 - tilt)}
             step={1}
             onValueChange={([value]) => onRackTiltChange(value)}
           />
@@ -396,8 +396,8 @@ export function ControlRail(props: ControlRailProps) {
       >
         <Slider
           value={[moduleWatts]}
-          min={300}
-          max={700}
+          min={100}
+          max={1000}
           step={5}
           onValueChange={([value]) => onModuleWattsChange(value)}
         />
@@ -451,7 +451,7 @@ export function ControlRail(props: ControlRailProps) {
           <label className="flex cursor-pointer items-center justify-between gap-3 text-sm">
             <span className="flex items-center gap-2">
               <PanelTop className="size-4 text-muted-foreground" />
-              Yield heat map
+              Beam shade map
             </span>
             <Switch
               checked={showHeatmap}

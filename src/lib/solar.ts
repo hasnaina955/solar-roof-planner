@@ -246,35 +246,44 @@ export function profileAltitude(
 ): number {
   if (sun.altitude <= 0) return 0;
   const dAz = (sun.azimuth - surface.azimuth) * DEG;
-  return Math.atan(Math.tan(sun.altitude * DEG) * Math.cos(dAz)) * RAD;
+  // Project onto the vertical plane normal to the rows. atan2 preserves
+  // back-facing sun (>90°); off-axis sun has a HIGHER profile altitude.
+  return Math.atan2(
+    Math.sin(sun.altitude * DEG),
+    Math.cos(sun.altitude * DEG) * Math.cos(dAz),
+  ) * RAD;
 }
 
 /**
- * Minimum row pitch for zero winter-solstice inter-row shading.
- *
- *   pitch = L * (1 + tan(alpha) / tan(beta))
- *
- * where L is the module dimension along the slope, beta the roof tilt and
- * alpha the profile altitude. This is the classic PV row-spacing result and
- * it is the single biggest driver of how many panels a roof can hold.
+ * Row pitch measured along the roof, for the specified design sun.
+ * With rack angle r = module tilt - roof tilt and a = profile + roof tilt:
+ *   pitch = L cos(r) + L sin(r) cot(a).
+ * This is the high edge's ray projection onto the roof plane. For a flat
+ * roof it reduces to L cos(tilt) + L sin(tilt) / tan(profile).
+ * A sun behind the roof cannot provide a no-shading design condition.
  */
 export function requiredRowPitch(
   moduleAlongSlope: number,
   tilt: number,
   profileAlt: number,
+  roofTilt = 0,
 ): number {
-  const beta = Math.max(tilt, 1) * DEG;
-  const alpha = Math.max(profileAlt, 0.5) * DEG;
-  return moduleAlongSlope * (1 + Math.tan(alpha) / Math.tan(beta));
+  const rack = Math.max(0, tilt - roofTilt) * DEG;
+  const footprint = moduleAlongSlope * Math.cos(rack);
+  const a = (profileAlt + roofTilt) * DEG;
+  if (Math.sin(a) <= 1e-9) return footprint;
+  const shadowReach = moduleAlongSlope * Math.sin(rack) * Math.cos(a) / Math.sin(a);
+  return footprint + Math.max(0, shadowReach);
 }
 
-/** Solar altitude at local solar noon on the winter solstice (21 Dec). */
+/** Profile altitude at solar noon on the hemisphere's winter solstice. */
 export function winterSolsticeNoonAltitude(
   latitude: number,
   surfaceAzimuth: number,
 ): number {
-  const winterSolstice = new Date(Date.UTC(2023, 11, 21));
-  const position = solarPosition(latitude, 0, 0, winterSolstice, 720);
+  const winterSolstice = new Date(Date.UTC(2023, latitude < 0 ? 5 : 11, 21));
+  const clockNoon = solarPosition(latitude, 0, 0, winterSolstice, 720);
+  const position = solarPosition(latitude, 0, 0, winterSolstice, 720 - clockNoon.eqTime);
   return profileAltitude(position, { tilt: 0, azimuth: surfaceAzimuth });
 }
 
@@ -514,7 +523,8 @@ export function dayEvents(
   system: SystemSpec,
   date: Date,
 ): { sunrise: number; noon: number; sunset: number } {
-  const noon = 720 - system.utcOffset * 60 - system.longitude * 4;
+  const clockNoon = solarPosition(system.latitude, system.longitude, system.utcOffset, date, 720);
+  const noon = 720 + system.utcOffset * 60 - system.longitude * 4 - clockNoon.eqTime;
   let sunrise = 0;
   let sunset = 1440;
   for (let m = 0; m <= 1440; m += 2) {

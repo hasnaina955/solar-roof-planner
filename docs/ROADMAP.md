@@ -1,130 +1,82 @@
-# Roadmap
+# Roadmap and current status
 
-Honest status. "Shipped" means built and numerically verified. Nothing here
-has been visually confirmed in a rendered preview — see the caveat at the bottom.
+Helio is a 3D planning foundation with a household energy estimator. It is not
+yet the requested multi-appliance operational simulator. Keep the existing
+Three.js/React/Convex stack and evolve it into two equal tools sharing projects.
 
-## Shipped
+## Phase 1 — trust and recovery implementation
 
-### Energy engine — `src/lib/solar.ts`
-NOAA solar position, Kasten–Young air mass, Hottel beam attenuation, isotropic
-sky transposition, cell-temperature derates, inverter clipping, and a 365-day
-integration at 15-minute resolution. Verified against a calibration table of
-specific yields for all twelve site presets.
+Implemented:
 
-### Geometry and layout — `src/lib/roof.ts`
-Roof-plane basis, 2D polygon maths, a greedy row-by-row layout solver that keeps
-parallelogram and L-shaped roofs dense, the winter-design-day row pitch, and
-geometric module-level shading from convex projections sampled on a 5×5 grid.
+- Honest annual generation/use ratios instead of “Solar covers” and “Bill offset”.
+  Removed unsupported whole-house operation and CO₂/savings promises.
+- Usage shows the inverter AC ceiling, not current sun output mislabeled as peak.
+- Rack surface tilt drives live/day/annual energy and rendered orientation, with
+  consistent 70° cap.
+- Corrected off-axis profile angle and roof-coordinate row pitch; June winter
+  in the southern hemisphere, December in the north.
+- Sample rays intersect actual module surfaces and vent boxes; front/rear row
+  direction and module-normal illumination are handled explicitly.
+- Full-day seasonal shadow sampling instead of 06:00–18:00 clamping.
+- Fixed the inverted displayed instantaneous shading-loss percentage and incorrect
+  UTC sign in solar noon.
+- Packing uses projected rack footprints and top/bottom edge setbacks.
+- Complete versioned saved configuration, including appliances, racks, custom
+  watts, panel limit, geometry, date/time. Legacy saves show missing-field warning.
+- Validated per-user local drafts restored after refresh.
+- Action-based undo/redo, same-control coalescing, redo invalidation, atomic module
+  selection/custom-watts restoration and native text-field shortcut handling.
+- Independent geometry/history/serialization tests and dashboard source-wiring
+  guards, replacing the repeated-identical-call “clock invariance” test.
 
-Five real bugs were found and fixed here during development:
+Checked: Convex codegen/deployment command, TypeScript and numerical tests.
+**Not complete sign-off:** browser save/load, refresh, clock scrub, text editing,
+auth switching and rendered layouts remain unverified. Full physics requires
+external data/convergence validation. No claim of engineering certification.
 
-1. Azimuth conversion inverted.
-2. Roof normal not perpendicular to the roof plane.
-3. Power model multiplied module watts by area — dimensionally wrong.
-4. The annual loop used 1/15-hour steps instead of 0.25 h, and double-divided
-   the kWh result.
-5. Flush modules were modelled as if they were racked.
+Layout corrections change the default module count and outputs relative to old
+saved summaries. Old summaries are retained, not silently rewritten.
 
-### Seasonal shading — fixed this cycle
-The annual figure was reading an *instantaneous* derate and extrapolating it
-across the year. Two consequences: the headline kWh moved while you dragged the
-time-of-day slider, and a 35,040-step integration ran on every animation frame.
+## Phase 2 — multi-appliance simulator
 
-Both are fixed. The annual model now resolves shading on a 12 × 13 grid of
-representative days and hours. Winter row shading, which was missing entirely,
-now appears in the year. Guarded by `scripts/verify-shading.ts`.
+Completion example: two 220 W panels plus a 150 Ah battery and multiple loads.
+Ask for battery voltage, chemistry, usable capacity, starting charge, charge and
+discharge limits, inverter continuous/surge ratings, location and grid mode.
 
-A second bug surfaced in the same function: the derate was scaling diffuse and
-ground-reflected light as well as beam. Corrected.
+Add start/stop schedules and overlapping appliances, solar/grid/battery dispatch,
+startup/continuous overload handling and explicit unmet loads. Show solar versus
+demand, battery SOC, running appliances, shortfalls and grid dependence over time.
+Recommendations must come from comparing simulated alternatives, not generic
+advice. A single representative day is not sufficient for seasonal autonomy.
 
-### Scene — `src/components/planner/RoofScene.tsx`
-Roof slab with a real fascia board, walls that follow the roof plane, windows and
-a door for scale, instanced modules with a rise-in animation, vent stacks, two
-tree species, planting, compass readout, sun arc with hour labels, and three
-camera framings that tween between presets.
+## Phase 3 — two equal tools and mobile parity
 
-The "panels render black" bug had a single root cause: `InstancedMesh` multiplies
-instance colour by material colour, so a dark blue material carrying dark blue
-instance colours squares the darkness to near-black.
+Navigation: Planner · Usage Simulator · Compare. Usage gets a full workspace,
+not only a modal. Allow existing-system setup without tracing a roof, transfer a
+planned array into simulation, and save both parts together. Preserve baseline
+scenarios when comparing alternatives.
 
-### Physical lighting
-Scene lighting now runs the same clear-sky model as the energy numbers, so the
-picture and the physics cannot drift. Calibrated so the previously-tuned condition
-renders identically, with smooth variation across altitude and cloud cover.
-Guarded by `scripts/verify-lighting.ts`.
+On mobile, expose every essential input through accessible sheets/results views.
+Current compact city/totals replacement is still inadequate; this is not fixed by
+Phase 1. Landing should demonstrate both tools only once both actually exist.
 
-### Product surface
-Landing page, Convex Auth, protected planner route, saved designs in Convex,
-control and insight rails, a 22-appliance load calculator, a date/time scrubber,
-and keyboard shortcuts for transport and view presets.
+## Phase 4 — planning realism
 
-### Undo/redo — shipped this cycle
-`src/hooks/use-design-history.ts`. Snapshots the serialised design state rather
-than rewriting thirteen `useState` values into a reducer, so the existing
-component structure is untouched. Rapid edits that share a shape coalesce into
-one step, so dragging the tilt slider is a single undo rather than two hundred.
-Changing the roof, the vents, the appliances or the module always starts a new
-step. Bound to Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z, plus header buttons. Loading a
-saved design resets the history so undo cannot reach across into it.
+Individual panel placement/removal, dimension/snapping tools, editable obstacles,
+multiple roof faces and traceable layout-to-simulation effects. Investigate PVGIS
+historical irradiance/TMY via Convex actions and server-side cache. Historical
+records are not live weather forecasts. Validate provider coverage/terms and data
+provenance before making accuracy claims.
 
-Known interaction: selecting a module preset resets the nameplate watts through
-an effect, so undoing across a module change restores the preset's watts rather
-than a custom value.
+## Phase 5 — production hardening
 
-## Known gaps
+Browser/a11y tests, mobile device rendering and adaptive quality, GPU lifecycle
+audit, worker-based calculation if measured costs justify it, exportable project
+reports and scenario comparisons. Reference tests do not replace field validation.
 
-In rough priority order.
+## Version control and preview limits
 
-1. **No manual module editing.** You can change global setback but cannot remove
-   a single panel that sits awkwardly, or drag one to a better spot.
-2. **Appliances are not persisted.** The `designs` table stores the roof, the
-   array and the yield, but not the household usage profile, so a saved design
-   loses the load calculation it was made with.
-3. **No state persistence across a refresh.** Fifteen pieces of design state in
-   `useState` with no localStorage. A reload loses the session.
-4. **No cost or payback framing.** The audience is homeowners deciding between
-   options, and they care about money, not kWh/kWp.
-5. **Module-level temperature mismatch is not modelled.** A partially shaded
-   array is optimistic; see `docs/PHYSICS.md`.
-6. **Single tilted plane only.** Hips, valleys and dormers are not modelled.
-
-## Next
-
-Persisting the appliance list with saved designs, then session persistence via
-localStorage, then cost and payback framing.
-
-## Unreleased since the last push
-
-This is the changelog for the next commit. Everything below is new work, not yet
-committed.
-
-### Fixed
-- The annual energy figure no longer depends on the time-of-day slider. It was
-  reading an instantaneous shading derate and extrapolating it across the year.
-- The same fix removed a 35,040-step integration from the animation path. It was
-  running on every frame of the day sweep.
-- Shading derates now scale the beam component only. Diffuse and
-  ground-reflected light were being darkened along with the direct beam.
-- Fog colour now matches the horizon band of the sky gradient, so the far edge
-  of the plot dissolves into the sky.
-- Crossing the horizon no longer steps brightness *up* into a brighter night.
-
-### Added
-- Seasonal shading: the year now resolves shading on a 12 × 13 grid of
-  representative days and hours instead of one instant.
-- Physical scene lighting driven by the same clear-sky model as the energy
-  numbers, calibrated so the previously-tuned condition renders identically.
-- Soft ground contact shadow under the house footprint.
-- Undo/redo across the whole design state, with keyboard shortcuts.
-- `CONTRIBUTING.md`, `docs/ARCHITECTURE.md`, `docs/PHYSICS.md`,
-  `docs/ROADMAP.md`.
-- Three verification scripts: `verify-shading`, `verify-lighting`, `calibration`.
-
-## The caveat
-
-None of this has been visually confirmed. Every check in `scripts/` is numeric:
-specific yields, geometric clearance, monotone response curves, invariant
-checksums on the annual figure. That is enough to be confident the maths is
-right and nothing is silently broken, but it is not enough to say the scene
-*looks* good. The rendering claims in this file describe what the code does, not
-what anyone has seen.
+The hosted platform manages Git/export; terminal Git/GitHub synchronization is
+blocked. No commit/push or remote synchronization claim is made by these edits.
+There is no browser inspection tool in this session, so rendered appearance and
+end-to-end interactions are not verified.

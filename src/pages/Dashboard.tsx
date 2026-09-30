@@ -18,7 +18,7 @@ import {
   Redo2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useDesignHistory } from "@/hooks/use-design-history";
+import { defaultProject, designFromProject, parseProject, readDraft, writeDraft, type PlannerProject, type PlannerDesign } from "@/lib/project";
 import {
   DEFAULT_OBSTACLES,
   MODULE_PRESETS,
@@ -68,7 +69,6 @@ import { ControlRail } from "@/components/planner/ControlRail";
 import { InsightRail } from "@/components/planner/InsightRail";
 import { LoadCalculator } from "@/components/planner/LoadCalculator";
 import {
-  defaultAppliances,
   summariseUsage,
   type Appliance,
 } from "@/lib/appliances";
@@ -86,86 +86,82 @@ import { TimeBar } from "@/components/planner/TimeBar";
 const GROUND_ALBEDO = 0.2;
 const DC_AC_RATIO = 1.15;
 const PANEL_GAP = 0.02;
+const CONTINUOUS_KEYS = ["tilt", "azimuth", "rackTilt", "setback", "panelLimit", "moduleWatts"];
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  if (!user) return <div className="grid h-screen place-items-center text-muted-foreground">Loading project…</div>;
+  return <Planner key={user._id} ownerId={user._id} />;
+}
+
+function Planner({ ownerId }: { ownerId: string }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
   /* ------------------------------------------------------------ *
    * Design state
    * ------------------------------------------------------------ */
-  const [siteId, setSiteId] = useState("sf");
-  const [moduleId, setModuleId] = useState("modern-440");
-  const [tilt, setTilt] = useState(25);
-  const [azimuth, setAzimuth] = useState(180);
-  const [orientation, setOrientation] = useState<"portrait" | "landscape">(
-    "portrait",
-  );
-  const [mounting, setMounting] = useState<Mounting>("flush");
-  const [rackTilt, setRackTilt] = useState(10);
-  const [setback, setSetback] = useState(0.4);
-  const [polygon, setPolygon] = useState<Point2[]>(starterRoof);
-  const [obstacles, setObstacles] = useState<Obstacle[]>(DEFAULT_OBSTACLES);
-  const [appliances, setAppliances] = useState<Appliance[]>(defaultAppliances);
-  /** null = install every position the roof will take. */
-  const [panelLimit, setPanelLimit] = useState<number | null>(null);
-  const [moduleWatts, setModuleWatts] = useState(MODULE_PRESETS[1].wattage);
-
-  const [dayOfYear, setDayOfYear] = useState(172);
-  const [minutes, setMinutes] = useState(13 * 60);
-  const [isPlaying, setIsPlaying] = useState(false);
-
-  /* ------------------------------------------------------------ *
-   * Undo / redo over the design state
-   * ------------------------------------------------------------ */
-  const design = useMemo(
-    () => ({
-      siteId,
-      moduleId,
-      tilt,
-      azimuth,
-      orientation,
-      mounting,
-      rackTilt,
-      setback,
-      polygon,
-      obstacles,
-      appliances,
-      panelLimit,
-      moduleWatts,
-    }),
-    [
-      siteId, moduleId, tilt, azimuth, orientation, mounting,
-      rackTilt, setback, polygon, obstacles, appliances, panelLimit, moduleWatts,
-    ],
-  );
-
-  const history = useDesignHistory({
-    read: () => design,
-    apply: (next) => {
-      setSiteId(next.siteId);
-      setModuleId(next.moduleId);
-      setTilt(next.tilt);
-      setAzimuth(next.azimuth);
-      setOrientation(next.orientation);
-      setMounting(next.mounting);
-      setRackTilt(next.rackTilt);
-      setSetback(next.setback);
-      setPolygon(next.polygon);
-      setObstacles(next.obstacles);
-      setAppliances(next.appliances);
-      setPanelLimit(next.panelLimit);
-      setModuleWatts(next.moduleWatts);
-    },
-    // Anything that reshapes the design is its own step; only continuous
-    // tweaks (tilt, azimuth, setback, rack tilt, panel count, watts) coalesce.
-    shapeOf: (d) =>
-      JSON.stringify([
-        d.moduleId, d.orientation, d.mounting,
-        d.polygon, d.obstacles, d.appliances,
-      ]),
+  const [initial] = useState(() => {
+    try { return readDraft(window.localStorage, ownerId) ?? defaultProject(); }
+    catch { return defaultProject(); }
   });
-  const { undo, redo, canUndo, canRedo } = history;
+  const history = useDesignHistory<PlannerDesign>(designFromProject(initial), CONTINUOUS_KEYS);
+  const { design, edit, undo, redo, canUndo, canRedo } = history;
+  const { siteId, moduleId, tilt, azimuth, orientation, mounting, rackTilt,
+    setback, polygon, obstacles, appliances, panelLimit, moduleWatts } = design;
+  const setField = useCallback(<K extends keyof PlannerDesign>(key: K, value: SetStateAction<PlannerDesign[K]>) => {
+    edit((current) => ({ [key]: typeof value === "function"
+      ? (value as (previous: PlannerDesign[K]) => PlannerDesign[K])(current[key]) : value } as Partial<PlannerDesign>));
+  }, [edit]);
+  const setSiteId = (value: string) => setField("siteId", value);
+  const setModuleId = (value: string) => {
+    const preset = MODULE_PRESETS.find((p) => p.id === value);
+    if (preset) edit({ moduleId: value, moduleWatts: preset.wattage });
+  };
+  const setTilt = (value: number) => setField("tilt", value);
+  const setAzimuth = (value: number) => setField("azimuth", value);
+  const setOrientation = (value: "portrait" | "landscape") => setField("orientation", value);
+  const setMounting = (value: Mounting) => setField("mounting", value);
+  const setRackTilt = (value: number) => setField("rackTilt", value);
+  const setSetback = (value: number) => setField("setback", value);
+  const setPolygon = useCallback((value: Point2[]) => setField("polygon", value), [setField]);
+  const setObstacles = useCallback((value: SetStateAction<Obstacle[]>) => setField("obstacles", value), [setField]);
+  const setAppliances = (value: Appliance[]) => setField("appliances", value);
+  const setPanelLimit = (value: number | null) => setField("panelLimit", value);
+  const setModuleWatts = (value: number) => setField("moduleWatts", value);
+
+  const [dayOfYear, setDayOfYear] = useState(initial.dayOfYear);
+  const [minutes, setMinutes] = useState(initial.minutes);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const project = useMemo<PlannerProject>(() => ({ ...design, version: 1, dayOfYear, minutes }), [design, dayOfYear, minutes]);
+  const latestProject = useRef(project);
+  const storageWarning = useRef(false);
+  useEffect(() => {
+    latestProject.current = project;
+    const persist = () => {
+      try {
+        if (!writeDraft(window.localStorage, ownerId, project) && !storageWarning.current) {
+          storageWarning.current = true;
+          toast.warning("Local draft recovery is unavailable. Save an option to keep your work.");
+        }
+      } catch {
+        if (!storageWarning.current) {
+          storageWarning.current = true;
+          toast.warning("Local draft recovery is unavailable. Save an option to keep your work.");
+        }
+      }
+    };
+    const timer = window.setTimeout(persist, 300);
+    window.addEventListener("pagehide", persist);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("pagehide", persist);
+    };
+  }, [ownerId, project]);
+  useEffect(() => () => {
+    try { writeDraft(window.localStorage, ownerId, latestProject.current); }
+    catch { /* No recovery when storage is disabled. */ }
+  }, [ownerId]);
 
   const [mode, setMode] = useState<SceneMode>("orbit");
   const [drawPoints, setDrawPoints] = useState<Point2[]>([]);
@@ -222,11 +218,6 @@ export default function Dashboard() {
     ],
   );
 
-  // Selecting a module preset resets the nameplate watts to that preset.
-  useEffect(() => {
-    setModuleWatts(modulePreset.wattage);
-  }, [modulePreset.id, modulePreset.wattage]);
-
   const usage = useMemo(() => summariseUsage(appliances), [appliances]);
   const maxPanels = layout.panels.length;
   const panelCount =
@@ -267,7 +258,7 @@ export default function Dashboard() {
     ],
   );
 
-  const surface = useMemo(() => ({ tilt, azimuth }), [tilt, azimuth]);
+  const surface = useMemo(() => ({ tilt: layout.moduleTilt, azimuth }), [layout.moduleTilt, azimuth]);
   const date = useMemo(() => new Date(Date.UTC(2023, 0, dayOfYear)), [dayOfYear]);
 
   const sun = useMemo(
@@ -343,8 +334,8 @@ export default function Dashboard() {
   );
 
   const energy = useMemo(
-    () => annualEnergy(system, panelCount, tilt, azimuth, shadeAt),
-    [system, panelCount, tilt, azimuth, shadeAt],
+    () => annualEnergy(system, panelCount, surface.tilt, surface.azimuth, shadeAt),
+    [system, panelCount, surface, shadeAt],
   );
 
   const monthIndex = monthOfDay(doyOf(date));
@@ -429,6 +420,7 @@ export default function Dashboard() {
    * ------------------------------------------------------------ */
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
       const target = event.target as HTMLElement | null;
       // Never hijack a key while the user is typing, or while a button holds
       // focus — otherwise space would re-trigger the last button clicked.
@@ -475,7 +467,7 @@ export default function Dashboard() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo]);
+  }, []);
 
   /* ------------------------------------------------------------ *
    * Undo / redo shortcuts
@@ -486,7 +478,9 @@ export default function Dashboard() {
    * ------------------------------------------------------------ */
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) return;
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || target?.closest("input, textarea, select, [contenteditable], [role='textbox']")) return;
       const key = event.key.toLowerCase();
       if (key === "z" && !event.shiftKey) {
         event.preventDefault();
@@ -521,7 +515,7 @@ export default function Dashboard() {
     setDrawPoints([]);
     setMode("orbit");
     toast.success("Roof updated — modules relaid out.");
-  }, [drawPoints]);
+  }, [drawPoints, setPolygon]);
 
   const cancelDraw = useCallback(() => {
     setDrawPoints([]);
@@ -530,6 +524,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.defaultPrevented || target?.isContentEditable || target?.closest("input, textarea, select, button, [contenteditable], [role='textbox']")) return;
       if (event.key === "Escape" && mode === "draw") cancelDraw();
       if (event.key === "Enter" && mode === "draw") closeShape();
     };
@@ -555,7 +551,7 @@ export default function Dashboard() {
       setMode("orbit");
       toast.success("Vent added — shadows and yield updated.");
     },
-    [],
+    [setObstacles],
   );
 
   /* ------------------------------------------------------------ *
@@ -584,11 +580,12 @@ export default function Dashboard() {
         setback,
         moduleLength: modulePreset.length,
         moduleWidth: modulePreset.width,
-        wattage: modulePreset.wattage,
+        wattage: moduleWatts,
         panelCount,
         capacityKw: capacityW / 1000,
         annualKwh: energy.annualKwh,
         specificYield: energy.specificYield,
+        project,
       });
       toast.success(`Saved “${name}”.`);
     } catch (error) {
@@ -599,20 +596,23 @@ export default function Dashboard() {
   };
 
   const handleLoad = (design: SavedDesign) => {
-    setSiteId(design.siteId);
-    setModuleId(design.moduleId);
-    setPanelLimit(null);
-    setTilt(design.tilt);
-    setAzimuth(design.azimuth);
-    setOrientation(design.orientation);
-    setSetback(design.setback);
-    setPolygon(design.polygon);
-    setObstacles(design.obstacles);
+    const restored = parseProject(design.project ?? {
+      ...defaultProject(), siteId: design.siteId, moduleId: design.moduleId,
+      tilt: design.tilt, azimuth: design.azimuth, orientation: design.orientation,
+      setback: design.setback, polygon: design.polygon, obstacles: design.obstacles,
+      moduleWatts: design.wattage, panelLimit: design.panelCount,
+    });
+    if (!restored) {
+      toast.error("This saved project is invalid or uses an unsupported version.");
+      return;
+    }
+    history.replace(designFromProject(restored));
+    setDayOfYear(restored.dayOfYear);
+    setMinutes(restored.minutes);
+    setIsPlaying(false);
     setMode("orbit");
     setDrawPoints([]);
-    // A loaded design is a fresh starting point, so undo should not reach back
-    // across into whatever was on screen before.
-    history.reset();
+    if (!design.project) toast.warning("Legacy option: mounting and appliances were not saved. Default values were used.");
     toast.success(`Loaded “${design.name}”.`);
   };
 
@@ -629,7 +629,7 @@ export default function Dashboard() {
    * ------------------------------------------------------------ */
   const roofArea = Math.abs(polygonArea(polygon));
   const moduleArea = modulePreset.length * modulePreset.width;
-  const coveredArea = panelCount * moduleArea;
+  const coveredArea = panelCount * moduleArea * Math.cos((layout.moduleTilt - tilt) * Math.PI / 180);
   // Preview uses the raw points: normalising would shift the outline away from
   // where the user actually clicked. Normalisation happens on commit instead.
   const ghostPolygon =
@@ -667,9 +667,9 @@ export default function Dashboard() {
             [energy.specificYield.toFixed(0), "kWh per kWp"],
             [
               usage.annualKwh > 0
-                ? `${Math.min(100, Math.round((energy.annualKwh / usage.annualKwh) * 100))}%`
+                ? `${Math.round((energy.annualKwh / usage.annualKwh) * 100)}%`
                 : "—",
-              "of your usage",
+              "generation / use",
             ],
           ].map(([value, label]) => (
             <div key={label} className="px-3 py-1 text-center">
@@ -696,17 +696,17 @@ export default function Dashboard() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-3xl">
               <DialogHeader>
-                <DialogTitle>What you actually use</DialogTitle>
+                <DialogTitle>Household energy estimate</DialogTitle>
                 <DialogDescription>
-                  Build your household from appliances to see the draw each one
-                  is responsible for, and how much of it the array covers.
+                  Estimate daily consumption and compare annual energy totals.
+                  This is not yet an operational appliance simulator.
                 </DialogDescription>
               </DialogHeader>
               <LoadCalculator
                 appliances={appliances}
                 onChange={setAppliances}
                 solarAnnualKwh={energy.annualKwh}
-                solarPeakWatts={live.ac}
+                inverterWatts={capacityW > 0 ? system.inverterWatts : 0}
               />
             </DialogContent>
           </Dialog>
@@ -827,7 +827,7 @@ export default function Dashboard() {
               obstacles={obstacles}
               tilt={tilt}
               azimuth={azimuth}
-              rackTilt={mounting === "racked" ? rackTilt : 0}
+              rackTilt={layout.moduleTilt - tilt}
               sunDirection={sun.direction}
               clearness={site.clearness[monthIndex]}
               sunArc={sunArc}
@@ -978,7 +978,7 @@ export default function Dashboard() {
                 }`}
               >
                 <ThermometerSun className="size-3.5" />
-                {showHeatmap ? "Yield heat map" : "Realistic view"}
+                {showHeatmap ? "Beam shade map" : "Realistic view"}
               </button>
             </motion.div>
 

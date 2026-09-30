@@ -1,9 +1,8 @@
 /**
- * Specific yield across the site presets at the default design. This is the
- * quickest sanity check that a change to the physics has not broken the model,
- * and the source of the calibration table in docs/PHYSICS.md.
+ * Model-yield sanity report, NOT calibration against measured systems.
+ * Uses equator-facing arrays in both hemispheres and illustrative site presets.
  *
- *   bunx tsx scripts/calibration.ts
+ *   bun scripts/calibration.ts
  */
 import {
   SITE_PRESETS,
@@ -18,27 +17,18 @@ import { annualEnergy, dayOfYear as doyOf, type SystemSpec } from "../src/lib/so
 
 const mod = MODULE_PRESETS.find((p) => p.id === "modern-440")!;
 const tilt = 25;
-const azimuth = 180;
-const frame = roofFrame(tilt, azimuth);
-const layout = layoutPanels({
-  polygon: starterRoof(),
-  tilt,
-  azimuth,
-  latitude: 37.77,
-  moduleLength: mod.length,
-  moduleWidth: mod.width,
-  orientation: "portrait",
-  mounting: "flush",
-  rackTilt: 10,
-  setback: 0.4,
-  gap: 0.02,
-  obstacles: DEFAULT_OBSTACLES,
-});
-const count = layout.panels.length;
-const capacityW = count * mod.wattage;
-
-const rows: [string, number, number][] = [];
+const rows: [string, number, number, number][] = [];
 for (const site of SITE_PRESETS) {
+  const azimuth = site.latitude < 0 ? 0 : 180;
+  const frame = roofFrame(tilt, azimuth);
+  const layout = layoutPanels({
+    polygon: starterRoof(), tilt, azimuth, latitude: site.latitude,
+    moduleLength: mod.length, moduleWidth: mod.width, orientation: "portrait",
+    mounting: "flush", rackTilt: 10, setback: 0.4, gap: 0.02,
+    obstacles: DEFAULT_OBSTACLES,
+  });
+  const count = layout.panels.length;
+  const capacityW = count * mod.wattage;
   const system: SystemSpec = {
     module: {
       length: mod.length,
@@ -69,18 +59,17 @@ for (const site of SITE_PRESETS) {
   const result = annualEnergy(system, count, tilt, azimuth, (d, m) =>
     field.at(doyOf(d), m),
   );
-  rows.push([site.name, result.specificYield, result.capacityFactor]);
+  rows.push([site.name, result.specificYield, result.capacityFactor, count]);
 }
 
 rows.sort((a, b) => a[1] - b[1]);
 console.log(
-  `default design: ${count} modules, ${(capacityW / 1000).toFixed(2)} kWp, ` +
-    `tilt ${tilt}deg, azimuth S, flush, San Francisco obstruction set\n`,
+  `Model estimates only: ${tilt}deg, equator-facing, flush, sample roof/vents. Not measured climate validation.\n`,
 );
-console.log("Site              kWh/kWp/yr   capacity factor");
-for (const [name, yieldKwh, cf] of rows) {
+console.log("Site              kWh/kWp/yr   capacity factor   modules");
+for (const [name, yieldKwh, cf, count] of rows) {
   console.log(
-    `${name.padEnd(16)}  ${Math.round(yieldKwh).toString().padStart(7)}   ${(cf * 100).toFixed(1)}%`,
+    `${name.padEnd(16)}  ${Math.round(yieldKwh).toString().padStart(7)}   ${(cf * 100).toFixed(1)}%   ${count}`,
   );
 }
 const spread = rows[rows.length - 1][1] / rows[0][1];

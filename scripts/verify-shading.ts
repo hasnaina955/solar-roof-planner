@@ -1,11 +1,11 @@
 /**
  * Regression test for the annual shading model.
  *
- * The invariant that matters: the annual figure depends on the design only.
- * If it ever starts depending on the time-of-day slider again, the headline
- * kWh, kWh/kWp and %-of-usage all move while the sun is being scrubbed.
+ * Checks seasonal field samples against direct geometry and shaded energy
+ * against unshaded energy. Dashboard dependency wiring is checked separately
+ * in trust.test.ts; neither script is a browser interaction test.
  *
- *   bunx tsx scripts/verify-shading.ts
+ *   bun scripts/verify-shading.ts
  */
 import {
   SITE_PRESETS,
@@ -15,10 +15,12 @@ import {
   layoutPanels,
   roofFrame,
   buildShadingField,
+  computeShading,
   type Mounting,
 } from "../src/lib/roof";
 import {
   annualEnergy,
+  solarPosition,
   dayOfYear as doyOf,
   type SystemSpec,
 } from "../src/lib/solar";
@@ -84,8 +86,6 @@ function setup(mounting: Mounting) {
   return { layout, system, field };
 }
 
-const CLOCK = [300, 480, 660, 780, 960, 1140, 1260];
-
 for (const mounting of ["flush", "racked"] as Mounting[]) {
   const { layout, system, field } = setup(mounting);
   const n = layout.panels.length;
@@ -95,31 +95,34 @@ for (const mounting of ["flush", "racked"] as Mounting[]) {
     `\n=== ${mounting} ===  ${n} panels, ${((n * mod.wattage) / 1000).toFixed(2)} kWp, rowsCanShade=${layout.rowsCanShade}`,
   );
 
-  const byMinute = CLOCK.map((m) => Math.round(annualEnergy(system, n, tilt, azimuth, lookup).annualKwh));
-  const spread = Math.max(...byMinute) - Math.min(...byMinute);
-  check(
-    "annual kWh independent of the clock",
-    spread === 0,
-    `spread ${spread} kWh across ${CLOCK.length} times of day (${byMinute[0]} kWh)`,
-  );
+  let largestSampleError = 0;
+  for (const doy of [15, 166, 196, 349]) {
+    const date = new Date(Date.UTC(2023, 0, doy));
+    for (let minutes = 0; minutes <= 1440; minutes += 60) {
+      const sun = solarPosition(site.latitude, site.longitude, site.utcOffset, date, minutes);
+      const direct = sun.altitude <= 0 ? 0 : computeShading(layout.panels, DEFAULT_OBSTACLES, frame, layout.moduleHeight, layout.rowsCanShade, sun.direction).reduce((sum, shade) => sum + shade, 0) / n;
+      largestSampleError = Math.max(largestSampleError, Math.abs(direct - field.at(doy, minutes)));
+    }
+  }
+  check("full-day sampled field matches direct geometry", largestSampleError < 1e-6, `max error ${largestSampleError}`);
 
-  const unshaded = annualEnergy(system, n, tilt, azimuth).annualKwh;
-  const shaded = annualEnergy(system, n, tilt, azimuth, lookup).annualKwh;
+  const unshaded = annualEnergy(system, n, layout.moduleTilt, azimuth).annualKwh;
+  const shaded = annualEnergy(system, n, layout.moduleTilt, azimuth, lookup).annualKwh;
   const lossPct = 100 * (1 - shaded / unshaded);
   check("shading removes energy", lossPct > 0, `${lossPct.toFixed(2)}% annual loss`);
 
   // Winter mornings are the hard case: long shadows and low sun.
   console.log(
-    `  field @ 12:00  Jun ${field.at(196, 720).toFixed(4)}  Dec ${field.at(15, 720).toFixed(4)}`,
+    `  field @ 12:00  Jul ${field.at(196, 720).toFixed(4)}  Jan ${field.at(15, 720).toFixed(4)}`,
   );
   console.log(
-    `  field @ 08:00  Jun ${field.at(196, 480).toFixed(4)}  Dec ${field.at(15, 480).toFixed(4)}`,
+    `  field @ 08:00  Jul ${field.at(196, 480).toFixed(4)}  Jan ${field.at(15, 480).toFixed(4)}`,
   );
   if (mounting === "racked") {
     check(
-      "winter row shading is captured",
+      "seasonal obstacle / rack shadow variation is captured",
       field.at(15, 480) > field.at(196, 480),
-      `Dec ${field.at(15, 480).toFixed(4)} > Jun ${field.at(196, 480).toFixed(4)}`,
+      `Jan ${field.at(15, 480).toFixed(4)} > Jul ${field.at(196, 480).toFixed(4)}`,
     );
   }
 }

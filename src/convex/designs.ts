@@ -1,6 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { projectValidator } from "./project";
+import { parseProject } from "../lib/project";
 
 /** Saved roof designs, newest first. */
 export const list = query({
@@ -49,10 +51,12 @@ export const save = mutation({
     capacityKw: v.number(),
     annualKwh: v.number(),
     specificYield: v.number(),
+    project: projectValidator,
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("You must be signed in to save designs.");
+    if (!parseProject(args.project)) throw new Error("Invalid project configuration.");
     return await ctx.db.insert("designs", {
       ...args,
       owner: userId,
