@@ -17,6 +17,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { Brandmark } from "@/components/WorkspaceNav";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
+import { motion } from "framer-motion";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -116,7 +117,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       <div className="relative mx-auto flex h-16 w-full max-w-5xl items-center px-5"><Brandmark /></div>
       {/* Auth Content */}
       <div className="relative flex-1 flex items-center justify-center px-4 pb-16">
-        <div className="flex items-center justify-center h-full flex-col w-full max-w-[400px]">
+        <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="flex items-center justify-center h-full flex-col w-full max-w-[400px]">
         <Card className="w-full pb-0 panel-surface">
           {step === "signIn" ? (
             <>
@@ -282,7 +283,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             </a>
           </div>
         </Card>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

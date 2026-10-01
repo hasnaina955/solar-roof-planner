@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import {
@@ -228,7 +229,7 @@ export function InsightRail(props: InsightRailProps) {
       </Card>
 
       <div>
-        <div className="mb-3 flex items-center justify-between gap-2"><SectionTitle hint={chartTab === "day" ? `${dayTotal.toFixed(1)} kWh on the selected day` : "Illustrative monthly presets"}>{chartTab === "day" ? "Selected day’s estimate" : "Monthly output"}</SectionTitle><div role="tablist" aria-label="Output charts" className="flex shrink-0 gap-0.5 rounded-full border border-border bg-muted/60 p-0.5">{(["day", "year"] as const).map((t) => <button key={t} type="button" role="tab" aria-selected={chartTab === t} onClick={() => setChartTab(t)} className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${chartTab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{t === "day" ? "Day" : "Year"}</button>)}</div></div>
+        <div className="mb-3 flex items-center justify-between gap-2"><SectionTitle hint={chartTab === "day" ? `${dayTotal.toFixed(1)} kWh on the selected day` : "Illustrative monthly presets"}>{chartTab === "day" ? "Selected day’s estimate" : "Monthly output"}</SectionTitle><div role="tablist" aria-label="Output charts" className="flex shrink-0 gap-0.5 rounded-full border border-border bg-muted/60 p-0.5">{(["day", "year"] as const).map((t) => <button key={t} type="button" role="tab" aria-selected={chartTab === t} onClick={() => setChartTab(t)} className={`relative rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${chartTab === t ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{chartTab === t && <motion.span layoutId="insight-chart-pill" transition={{ type: "spring", stiffness: 500, damping: 38 }} className="absolute inset-0 rounded-full bg-card shadow-sm" />}<span className="relative z-10">{t === "day" ? "Day" : "Year"}</span></button>)}</div></div>
         {chartTab === "day" ? <>
         <div className="h-40 w-full">
           <ResponsiveContainer width="100%" height="100%">

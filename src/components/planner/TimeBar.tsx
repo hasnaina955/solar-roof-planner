@@ -80,7 +80,7 @@ export function TimeBar({
             step={1}
             onValueChange={([value]) => onDayChange(value)}
           />
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap items-center gap-1"><span className="text-[10px] text-muted-foreground/70">Jump to</span>
             {SOLSTICES.map((mark) => (
               <button
                 key={mark.label}

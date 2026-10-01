@@ -215,6 +215,22 @@
   [data-slot="button"] {
     border-radius: 0.85rem;
   }
+  /* Entrance: soft rise used sparingly on cards and columns. */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+  .rise {
+    animation: rise 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    animation-delay: var(--rise-delay, 0ms);
+  }
+  .rise-1 { --rise-delay: 70ms; }
+  .rise-2 { --rise-delay: 140ms; }
+  .rise-3 { --rise-delay: 210ms; }
+  /* Tactile press on every button. */
+  [data-slot="button"]:active {
+    transform: translateY(1px) scale(0.99);
+  }
   /* Blueprint sun-grid used behind heroes and empty states. */
   .sun-grid {
     background-image:

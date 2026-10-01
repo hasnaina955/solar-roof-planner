@@ -131,7 +131,7 @@ export default function Landing() {
           </div>
           <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">Explore your equipment independently, then connect a spatial plan when you're ready.</p>
         </div>
-        <div className="mt-10 grid gap-5 md:grid-cols-2">
+        <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-60px" }} transition={{ duration: 0.55, ease: "easeOut" }} className="mt-10 grid gap-5 md:grid-cols-2">
           <Link to="/auth?returnTo=%2Fsimulator" className="group panel-surface relative overflow-hidden p-7 transition-all hover:-translate-y-0.5 sm:p-9">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-400 via-primary to-primary/20" />
             <div className="flex items-center justify-between">
@@ -152,7 +152,7 @@ export default function Landing() {
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Trace a roof, explore mounting and orientation, and inspect sampled shadows. Send an Indian-site array into the usage simulator while keeping its roof snapshot.</p>
             <span className="mt-6 inline-flex items-center gap-2 text-xs font-bold tracking-wide">EXPLORE THE PLANNER <span className="grid size-7 place-items-center rounded-full border border-border transition-transform group-hover:translate-x-1"><ArrowUpRight className="size-3.5" /></span></span>
           </Link>
-        </div>
+        </motion.div>
       </section>
 
       <section className="border-y border-border/70 bg-card/60">
@@ -167,10 +167,10 @@ export default function Landing() {
             {[[PanelTop, "Configure the equipment you actually own", "Use custom nameplate ratings. See nominal bank energy, usable reserve and the separate limits of solar input, battery current and inverter output."], [Clock3, "Put appliances on the same clock", "Fans, lights, a TV, fridge or pump share a daily schedule. Power cuts, overlaps and midnight-crossing runs are modeled in IST."], [Zap, "Compare a change — not a sales promise", "Keep a baseline. Test another battery or inverter, or apply a schedule move backed by an alternate simulated run."]].map(([Icon, title, body], index) => {
               const Component = Icon as typeof Sun;
               return (
-                <div key={title as string} className="panel-surface flex gap-4 p-5">
+                <motion.div key={title as string} initial={{ opacity: 0, x: 24 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.45, delay: index * 0.08 }} className="panel-surface flex gap-4 p-5">
                   <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/12 text-primary"><Component className="size-4" /></span>
                   <div><p className="numeric text-[10px] text-muted-foreground">0{index + 1}</p><h3 className="mt-1 text-[0.95rem] font-semibold">{title as string}</h3><p className="mt-1.5 text-[0.82rem] leading-relaxed text-muted-foreground">{body as string}</p></div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -178,7 +178,7 @@ export default function Landing() {
       </section>
 
       <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-20">
-        <div className="ink-panel relative overflow-hidden rounded-[2rem] p-8 sm:p-12">
+        <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-60px" }} transition={{ duration: 0.55 }} className="ink-panel relative overflow-hidden rounded-[2rem] p-8 sm:p-12">
           <div className="sun-grid pointer-events-none absolute inset-0 opacity-30" />
           <div className="relative max-w-2xl">
             <p className="eyebrow text-amber-300">A small system is a good place to start</p>
@@ -186,7 +186,7 @@ export default function Landing() {
             <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/65">The simulator opens with a 12 V tubular battery, a 900 VA inverter, BLDC fan, LED lights, TV and router. Change every detail to match your home.</p>
             <Button asChild size="lg" className="mt-7 rounded-full"><Link to="/auth?returnTo=%2Fsimulator">Open the example <ArrowRight className="size-4" /></Link></Button>
           </div>
-        </div>
+        </motion.div>
         <p className="mt-6 max-w-4xl text-xs leading-relaxed text-muted-foreground">Transparent planning estimates, not certified electrical engineering. Solar curves use editable illustrative assumptions — not measured local weather or a forecast. Lead-acid rate effects and appliance duty cycles use simplified assumptions; battery ageing and real motor-start transients are not modeled. Always confirm equipment, wiring, protection and installation with a qualified professional.</p>
       </section>
 

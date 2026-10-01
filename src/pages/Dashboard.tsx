@@ -819,7 +819,7 @@ function Planner({ ownerId }: { ownerId: string }) {
                 {mode !== "draw" ? (
                   <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-border bg-card/90 p-1.5 shadow-sm backdrop-blur">
                     <div role="tablist" aria-label="Edit mode" className="flex items-center gap-0.5 rounded-xl bg-muted/70 p-0.5">
-                      {(["orbit", "draw", "obstacle"] as const).map((m) => <button key={m} type="button" role="tab" aria-selected={mode === m} title={m === "orbit" ? "Orbit / inspect" : m === "draw" ? "Trace a new roof outline" : "Place vents"} onClick={() => { if (m === "draw") setDrawPoints([]); setMode(m); }} className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${mode === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{m === "orbit" ? <ScanEye className="size-3.5" /> : m === "draw" ? <Pencil className="size-3.5" /> : <BoxSelect className="size-3.5" />}{m === "orbit" ? "Explore" : m === "draw" ? "Trace roof" : `Vent${obstacles.length > 0 ? ` (${obstacles.length})` : ""}`}</button>)}
+                      {(["orbit", "draw", "obstacle"] as const).map((m) => <button key={m} type="button" role="tab" aria-selected={mode === m} title={m === "orbit" ? "Orbit / inspect" : m === "draw" ? "Trace a new roof outline" : "Place vents"} onClick={() => { if (m === "draw") setDrawPoints([]); setMode(m); }} className={`relative flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${mode === m ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{mode === m && <motion.span layoutId="planner-mode-pill" transition={{ type: "spring", stiffness: 500, damping: 38 }} className="absolute inset-0 rounded-lg bg-card shadow-sm" />}<span className="relative z-10 flex items-center gap-1.5">{m === "orbit" ? <ScanEye className="size-3.5" /> : m === "draw" ? <Pencil className="size-3.5" /> : <BoxSelect className="size-3.5" />}{m === "orbit" ? "Explore" : m === "draw" ? "Trace roof" : `Vent${obstacles.length > 0 ? ` (${obstacles.length})` : ""}`}</span></button>)}
                     </div>
                     <Button
                       size="sm"
@@ -891,9 +891,9 @@ function Planner({ ownerId }: { ownerId: string }) {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="pointer-events-auto absolute bottom-4 left-4 flex flex-col gap-2"
+              className="pointer-events-auto absolute bottom-4 left-4 flex flex-col gap-1 rounded-2xl border border-border bg-card/85 p-1 shadow-sm backdrop-blur"
             >
-              <div className="flex items-center gap-1 rounded-full border border-border bg-card/85 p-1 shadow-sm backdrop-blur">
+              <div className="flex items-center gap-1">
                 {([
                   ["perspective", "Roof", ScanEye],
                   ["top", "Plan", Grid2x2],
@@ -903,28 +903,31 @@ function Planner({ ownerId }: { ownerId: string }) {
                     key={id}
                     type="button"
                     onClick={() => setView(id)}
-                    className={`flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    className={`relative flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
                       view === id
-                        ? "bg-secondary text-secondary-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        ? "text-secondary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <Icon className="size-3.5" />
-                    {label}
+                    {view === id && <motion.span layoutId="planner-view-pill" transition={{ type: "spring", stiffness: 500, damping: 38 }} className="absolute inset-0 rounded-full bg-secondary shadow-sm" />}
+                    <span className="relative z-10 flex items-center gap-1.5"><Icon className="size-3.5" />{label}</span>
                   </button>
                 ))}
               </div>
+              <div className="mx-1 border-t border-border/70" />
               <button
                 type="button"
                 onClick={() => setShowHeatmap((value) => !value)}
-                className={`flex cursor-pointer items-center gap-2 self-start rounded-full border border-border px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur transition-colors ${
+                aria-pressed={showHeatmap}
+                title="Toggle sampled beam-shade colouring on the modules"
+                className={`flex cursor-pointer items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors ${
                   showHeatmap
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-card/85 text-muted-foreground hover:text-foreground"
+                    ? "bg-primary/12 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
                 <ThermometerSun className="size-3.5" />
-                {showHeatmap ? "Beam shade map" : "Realistic view"}
+                {showHeatmap ? "Shade map on" : "Realistic view"}
               </button>
             </motion.div>
 
