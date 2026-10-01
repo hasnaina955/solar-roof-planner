@@ -22,23 +22,19 @@ export function NumericField({ label, value, onChange, min = 0, max = 100000, st
   const showSlider = slider && sMax > sMin;
   const sliderValue = Math.min(sMax, Math.max(sMin, value));
   const fill = sMax > sMin ? ((sliderValue - sMin) / (sMax - sMin)) * 100 : 50;
-  const fmtTick = (v: number) => step < 1 && Math.abs(v) < 10 ? v.toFixed(1) : `${v}`;
   return (
-    <div className="rounded-2xl border border-border/50 bg-background/60 px-4 pt-3.5 pb-3 transition-all duration-200 hover:border-primary/25 hover:shadow-[0_8px_24px_-16px_oklch(0.585_0.16_44/0.4)] focus-within:border-primary/40">
+    <div className="group/ctrl rounded-xl px-1 py-1 transition-colors duration-150 hover:bg-muted/30 focus-within:bg-muted/30">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold tracking-tight text-foreground">{label}</span>
-        <span className="flex shrink-0 items-baseline gap-1.5 rounded-xl bg-primary/[0.08] px-3 py-1.5 transition-colors duration-200 focus-within:bg-primary/[0.12]">
-          <input type="number" inputMode="decimal" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => { const next = Number(e.target.value); if (Number.isFinite(next)) clamp(next); }} className="numeric w-[4.5rem] bg-transparent text-right text-base font-bold tracking-tight text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-          {unit && <span className="text-[11px] font-bold text-primary">{unit}</span>}
+        <span className="text-[13px] font-semibold tracking-tight text-foreground">{label}</span>
+        <span className="flex shrink-0 items-baseline gap-1 rounded-lg border border-transparent bg-primary/[0.08] px-2.5 py-1 transition-all duration-150 group-hover/ctrl:border-primary/20 focus-within:border-primary/50 focus-within:bg-primary/[0.12]">
+          <input type="number" inputMode="decimal" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => { const next = Number(e.target.value); if (Number.isFinite(next)) clamp(next); }} className="numeric w-16 bg-transparent text-right text-[15px] font-bold tracking-tight text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+          {unit && <span className="text-[10px] font-bold text-primary">{unit}</span>}
         </span>
       </div>
       {showSlider && (
-        <div className="mt-1">
-          <input type="range" aria-label={label} min={sMin} max={sMax} step={step} value={sliderValue} onChange={(e) => clamp(Number(e.target.value))} style={{ "--fill": `${fill}%` } as CSSProperties} className="w-full" />
-          <div className="numeric -mt-0.5 flex justify-between text-[10px] font-medium text-muted-foreground/70"><span>{fmtTick(sMin)}{unit ? ` ${unit}` : ""}</span><span>{fmtTick(sMax)}{unit ? ` ${unit}` : ""}</span></div>
-        </div>
+        <input type="range" aria-label={label} min={sMin} max={sMax} step={step} value={sliderValue} onChange={(e) => clamp(Number(e.target.value))} style={{ "--fill": `${fill}%` } as CSSProperties} className="w-full" />
       )}
-      {hint && <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{hint}</span>}
+      {hint && <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{hint}</span>}
     </div>
   );
 }
@@ -89,19 +85,19 @@ export function Segmented<T extends string>({ label, value, onChange, options }:
 
 function Block({ number, title, subtitle, icon, children, defaultOpen = true }: { number: string; title: string; subtitle?: string; icon: ReactNode; summary?: string; children: ReactNode; defaultOpen?: boolean }) {
   return (
-    <section className="panel-surface relative overflow-hidden rounded-[1.4rem]">
+    <section className="panel-surface relative overflow-hidden rounded-3xl">
       <span className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-amber-400/50 via-primary/45 to-transparent" />
-      <details open={defaultOpen} className="group px-5 py-5">
-        <summary className="flex cursor-pointer list-none items-center gap-3.5 rounded-xl outline-none select-none [&::-webkit-details-marker]:hidden">
-          <span className="numeric rounded-lg bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary">{number}</span>
+      <details open={defaultOpen} className="group px-5 py-4">
+        <summary className="flex cursor-pointer list-none items-center gap-3 rounded-xl outline-none select-none [&::-webkit-details-marker]:hidden">
+          <span className="numeric rounded-lg bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">{number}</span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[16px] font-semibold tracking-tight">{title}</span>
-            {subtitle && <span className="mt-1 block text-[13px] leading-snug text-muted-foreground">{subtitle}</span>}
+            <span className="block text-[15px] font-semibold tracking-tight">{title}</span>
+            {subtitle && <span className="block text-xs leading-snug text-muted-foreground">{subtitle}</span>}
           </span>
-          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-muted/70 text-muted-foreground">{icon}</span>
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted/70 text-muted-foreground transition-colors duration-200 group-hover:text-foreground">{icon}</span>
           <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-300 group-open:rotate-180" />
         </summary>
-        <div className="space-y-5 pt-5">{children}</div>
+        <div className="space-y-3.5 pt-4">{children}</div>
       </details>
     </section>
   );
@@ -115,7 +111,7 @@ export function Equipment({ config, onChange }: { config: SimulationConfig; onCh
   const siteId = INDIA_SITES.find((site) => site.latitude === config.location.latitude && site.longitude === config.location.longitude)?.id ?? "custom";
   const batteryEnabled = config.grid.mode !== "grid-tied";
   return (
-    <div className="space-y-4">
+    <div className="space-y-3.5">
       <Block number="01" title="Location & connection" subtitle="City, supply type and outages" icon={<MapPin className="size-4" />}>
         <Choice label="City" hint="Schedules and solar use Indian Standard Time." value={siteId} onChange={(id) => { const site = INDIA_SITES.find((p) => p.id === id); if (site) onChange({ ...config, location: { name: site.name, latitude: site.latitude, longitude: site.longitude } }); }}>
           {INDIA_SITES.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}

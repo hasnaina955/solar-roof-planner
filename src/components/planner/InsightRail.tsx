@@ -150,7 +150,7 @@ export function InsightRail(props: InsightRailProps) {
 
   const [chartTab, setChartTab] = useState<"day" | "year">("day");
   return (
-    <div className="flex h-full flex-col gap-5 overflow-y-auto p-5">
+    <div className="simulator-side-scroll flex h-full flex-col gap-4 overflow-y-auto p-4">
       <div className="panel-surface relative overflow-hidden p-4">
         <span className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-amber-400/70 via-primary/60 to-transparent" />
         <p className="eyebrow text-primary">Simple answer</p>

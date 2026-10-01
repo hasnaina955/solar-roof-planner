@@ -225,7 +225,7 @@ export function ControlRail(props: ControlRailProps) {
   } = props;
 
   return (
-    <div className="flex h-full flex-col gap-5 overflow-y-auto p-5">
+    <div className="simulator-side-scroll flex h-full flex-col gap-4 overflow-y-auto p-4">
       {/* Live headline, so the answer stays on screen while you scroll inputs. */}
       <div className="panel-surface relative overflow-hidden p-3.5">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />

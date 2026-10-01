@@ -19,11 +19,11 @@ const REASONS: Record<LoadReason, string> = {
 
 export function Metric({ label, value, unit, hint, alert = false }: { label: string; value: string; unit?: string; hint: string; alert?: boolean }) {
   return (
-    <div className={`relative overflow-hidden rounded-2xl border p-5 transition-all duration-200 ${alert ? "border-destructive/30 bg-destructive/[0.05]" : "border-border/70 bg-card"}`}>
-      <span className={`absolute inset-x-0 top-0 h-[3px] ${alert ? "bg-destructive/50" : "bg-gradient-to-r from-amber-400/60 via-primary/50 to-transparent"}`} />
+    <div className={`relative overflow-hidden rounded-2xl border p-4 transition-all duration-200 ${alert ? "border-destructive/30 bg-destructive/[0.05]" : "border-border/70 bg-card"}`}>
+      <span className={`absolute inset-x-0 top-0 h-[2px] ${alert ? "bg-destructive/50" : "bg-gradient-to-r from-amber-400/60 via-primary/50 to-transparent"}`} />
       <p className="eyebrow !text-[9px] text-muted-foreground">{label}</p>
-      <p className="numeric mt-2.5 text-[1.7rem] font-semibold leading-none tracking-tight">{value}<span className="ml-1.5 font-sans text-xs font-normal text-muted-foreground">{unit}</span></p>
-      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{hint}</p>
+      <p className="numeric mt-1.5 text-[1.45rem] font-semibold leading-none tracking-tight">{value}<span className="ml-1 font-sans text-xs font-normal text-muted-foreground">{unit}</span></p>
+      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{hint}</p>
     </div>
   );
 }
@@ -46,8 +46,8 @@ export function Results({ config, result, selectedMinute, onSelect, advice, onAp
     ? { tone: "bad" as const, title: "Storage runs out", body: `The battery reaches its ${config.battery.reserveSoc}% reserve floor, after which scheduled loads go unserved. Options: more storage, more daytime charging, or shifting some use to solar hours.` }
     : { tone: "bad" as const, title: "Load timing does not match solar hours", body: `Energy is available during the day, but demand falls at night (${(result.outageMinutes / 60).toFixed(1)} hours unserved). Shifting a load to midday can reduce the shortfall — see the suggestion below.` };
   return (
-    <div className="space-y-5">
-      <motion.div role="status" key={verdict.tone + verdict.title} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: "easeOut" }} className={`flex items-start gap-3.5 rounded-2xl border p-5 ${verdict.tone === "good" ? "border-emerald-600/25 bg-emerald-500/[0.07]" : verdict.tone === "idle" ? "border-border/80 bg-card" : "border-destructive/25 bg-destructive/[0.05]"}`}>
+    <div className="space-y-4">
+      <motion.div role="status" key={verdict.tone + verdict.title} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: "easeOut" }} className={`flex items-start gap-3 rounded-2xl border p-4 ${verdict.tone === "good" ? "border-emerald-600/25 bg-emerald-500/[0.07]" : verdict.tone === "idle" ? "border-border/80 bg-card" : "border-destructive/25 bg-destructive/[0.05]"}`}>
         {verdict.tone === "good" ? <CircleCheck className="mt-0.5 size-5 shrink-0 text-emerald-600 dark:text-emerald-400" /> : verdict.tone === "idle" ? <Sun className="mt-0.5 size-5 shrink-0 text-primary" /> : <TriangleAlert className="mt-0.5 size-5 shrink-0 text-destructive" />}
         <div className="min-w-0">
           <p className="text-[15px] font-bold tracking-tight">{verdict.title}</p>
