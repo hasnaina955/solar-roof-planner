@@ -153,7 +153,7 @@ export function InsightRail(props: InsightRailProps) {
       <div className="panel-surface relative overflow-hidden p-4">
         <span className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-amber-400/70 via-primary/60 to-transparent" />
         <p className="eyebrow text-primary">Verdict</p>
-        <p className="display mt-1 text-[1.35rem] font-semibold leading-tight">{capacityKw.toFixed(2)} kWp · {Math.round(annualKwh).toLocaleString()} kWh/yr</p>
+        <p className="display mt-1 text-[1.35rem] font-semibold leading-tight">{capacityKw.toFixed(2)} kWp · {Math.round(annualKwh).toLocaleString("en-IN")} kWh/yr</p>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{panelCount} of {maxPanels} modules fit · {specificYield.toFixed(0)} kWh per kWp{annualUsage > 0 ? ` · covers ${ratio.toFixed(0)}% of modeled annual use (energy ratio, not savings)` : ""} · {(shadingDerate * 100).toFixed(1)}% beam shade at selected time.</p>
       </div>
       <div className="grid grid-cols-2 gap-2.5">
@@ -171,7 +171,7 @@ export function InsightRail(props: InsightRailProps) {
         />
         <Kpi
           label="Per year"
-          value={Math.round(annualKwh).toLocaleString()}
+          value={Math.round(annualKwh).toLocaleString("en-IN")}
           unit="kWh"
           sub={`${specificYield.toFixed(0)} kWh per kWp`}
           icon={TrendingUp}

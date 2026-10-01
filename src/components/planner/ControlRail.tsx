@@ -232,7 +232,7 @@ export function ControlRail(props: ControlRailProps) {
         <div className="flex items-baseline justify-between gap-3">
           <div>
             <p className="numeric text-2xl leading-none font-semibold tracking-tight">
-              {Math.round(annualKwh).toLocaleString()}
+              {Math.round(annualKwh).toLocaleString("en-IN")}
             </p>
             <p className="mt-1.5 text-[11px] text-muted-foreground">
               kWh a year from {panelCount} modules

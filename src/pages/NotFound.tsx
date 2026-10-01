@@ -1,24 +1,40 @@
 import { motion } from "framer-motion";
+import { ArrowLeft, Sun } from "lucide-react";
+import { Link } from "react-router";
+import { Button } from "@/components/ui/button";
+import { Brandmark } from "@/components/WorkspaceNav";
 
 export default function NotFound() {
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="min-h-screen flex flex-col"
+      transition={{ duration: 0.4 }}
+      className="relative min-h-screen flex flex-col bg-background overflow-hidden"
     >
-
-      
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <div className="max-w-5xl mx-auto relative px-4">
-          <div className="flex items-center justify-center min-h-[200px]">
-            <div className="text-center">
-              <h1 className="text-4xl font-bold text-gray-900 mb-4">404</h1>
-              <p className="text-lg text-gray-600">Page Not Found</p>
-            </div>
-          </div>
+      <div className="sun-grid pointer-events-none absolute inset-0" />
+      <div className="relative mx-auto flex h-16 w-full max-w-5xl items-center px-5">
+        <Brandmark />
+      </div>
+      <div className="relative flex-1 flex flex-col items-center justify-center px-5 text-center">
+        <span className="grid size-14 place-items-center rounded-2xl bg-secondary text-secondary-foreground">
+          <Sun className="size-6" />
+        </span>
+        <p className="eyebrow mt-6 text-muted-foreground">Off the map</p>
+        <h1 className="display mt-2 text-5xl font-semibold">404</h1>
+        <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
+          This page wandered off the roof. Your saved scenarios and drafts are safe —
+          head back to the workspace.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <Button asChild className="rounded-full">
+            <Link to="/simulator">
+              <ArrowLeft className="size-4" /> Back to simulator
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="rounded-full">
+            <Link to="/">Landing page</Link>
+          </Button>
         </div>
       </div>
     </motion.div>

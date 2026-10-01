@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/input-otp";
 
 import { useAuth } from "@/hooks/use-auth";
-import logo from "@/assets/logo.svg";
+import { Brandmark } from "@/components/WorkspaceNav";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
@@ -110,29 +110,21 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
-
-      
+    <div className="relative min-h-screen flex flex-col bg-background overflow-hidden">
+      <div className="sun-grid pointer-events-none absolute inset-0" />
+      <div className="pointer-events-none absolute -top-28 left-1/2 h-64 w-[36rem] -translate-x-1/2 rounded-full bg-primary/15 blur-[100px]" />
+      <div className="relative mx-auto flex h-16 w-full max-w-5xl items-center px-5"><Brandmark /></div>
       {/* Auth Content */}
-      <div className="flex-1 flex items-center justify-center">
-        <div className="flex items-center justify-center h-full flex-col">
-        <Card className="min-w-[350px] pb-0 border shadow-md">
+      <div className="relative flex-1 flex items-center justify-center px-4 pb-16">
+        <div className="flex items-center justify-center h-full flex-col w-full max-w-[400px]">
+        <Card className="w-full pb-0 panel-surface">
           {step === "signIn" ? (
             <>
               <CardHeader className="text-center">
-              <div className="flex justify-center">
-                    <img
-                      src={logo}
-                      alt="Lock Icon"
-                      width={64}
-                      height={64}
-                      className="rounded-lg mb-4 mt-4 cursor-pointer"
-                      onClick={() => navigate("/")}
-                    />
-                  </div>
-                <CardTitle className="text-xl">Get Started</CardTitle>
+                <p className="eyebrow text-primary">Helio energy lab</p>
+                <CardTitle className="display text-[1.7rem] font-semibold">Sign in to your workspace</CardTitle>
                 <CardDescription>
-                  Enter your email to log in or sign up
+                  Your simulator scenarios and roof options are saved per account.
                 </CardDescription>
               </CardHeader>
               <form onSubmit={handleEmailSubmit}>
@@ -196,7 +188,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           ) : (
             <>
               <CardHeader className="text-center mt-4">
-                <CardTitle>Check your email</CardTitle>
+                <p className="eyebrow text-primary">Almost there</p>
+                <CardTitle className="display text-[1.7rem] font-semibold">Check your email</CardTitle>
                 <CardDescription>
                   We've sent a code to {step.email}
                 </CardDescription>
