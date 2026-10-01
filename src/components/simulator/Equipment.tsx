@@ -10,7 +10,7 @@ export function Choice({ label, value, onChange, children }: { label: string; va
   return <label className="block space-y-1.5 text-xs"><span className="text-muted-foreground">{label}</span><select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/30">{children}</select></label>;
 }
 function Block({ number, title, icon, children }: { number: string; title: string; icon: ReactNode; children: ReactNode }) {
-  return <section className="panel-surface p-5"><div className="mb-5 flex items-center gap-2.5"><span className="numeric text-[10px] text-primary">{number}</span><h3 className="flex-1 text-sm font-semibold">{title}</h3><span className="text-muted-foreground">{icon}</span></div><div className="space-y-4">{children}</div></section>;
+  return <section className="panel-surface relative overflow-hidden p-5"><span className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-amber-400/60 via-primary/50 to-transparent" /><div className="mb-5 flex items-center gap-2.5"><span className="numeric rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{number}</span><h3 className="flex-1 text-sm font-semibold">{title}</h3><span className="grid size-8 place-items-center rounded-lg bg-muted text-muted-foreground">{icon}</span></div><div className="space-y-4">{children}</div></section>;
 }
 export function Equipment({ config, onChange }: { config: SimulationConfig; onChange: (config: SimulationConfig) => void }) {
   const s = config.solar, b = config.battery, i = config.inverter, bank = batteryBank(config);

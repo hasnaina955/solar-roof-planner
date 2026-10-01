@@ -661,14 +661,14 @@ function Planner({ ownerId }: { ownerId: string }) {
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       {/* Header */}
-      <div className="shrink-0 border-b border-border bg-card/80 px-4 py-2"><WorkspaceNav /></div>
-      <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border bg-card/70 px-3 backdrop-blur sm:px-4">
+      <div className="shrink-0 border-b border-border/70 bg-background/90 px-4 py-2 backdrop-blur"><WorkspaceNav /></div>
+      <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-card/80 px-3 backdrop-blur sm:px-4">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="relative grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm">
+          <span className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl text-[#fff7e8] shadow-[0_8px_20px_-8px_oklch(0.585_0.16_44/0.7)]" style={{ background: "conic-gradient(from 210deg, #e07b2e, #8a3c14 45%, #2b2118 80%, #e07b2e)" }}>
             <BoxSelect className="size-4" />
           </span>
           <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold tracking-tight">
+            <h1 className="display truncate text-[1.05rem] font-semibold leading-tight">
               {site.name} rooftop
             </h1>
             <p className="numeric truncate text-xs text-muted-foreground">
@@ -922,9 +922,9 @@ function Planner({ ownerId }: { ownerId: string }) {
                     key={id}
                     type="button"
                     onClick={() => setView(id)}
-                    className={`flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                    className={`flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
                       view === id
-                        ? "bg-foreground text-background"
+                        ? "bg-secondary text-secondary-foreground"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
                   >
