@@ -153,7 +153,7 @@ export function InsightRail(props: InsightRailProps) {
     <div className="flex h-full flex-col gap-5 overflow-y-auto p-5">
       <div className="panel-surface relative overflow-hidden p-4">
         <span className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-amber-400/70 via-primary/60 to-transparent" />
-        <p className="eyebrow text-primary">Verdict</p>
+        <p className="eyebrow text-primary">Simple answer</p>
         <p className="display mt-1 text-[1.35rem] font-semibold leading-tight">{capacityKw.toFixed(2)} kWp · {Math.round(annualKwh).toLocaleString("en-IN")} kWh/yr</p>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{panelCount} of {maxPanels} modules fit · {specificYield.toFixed(0)} kWh per kWp{annualUsage > 0 ? ` · covers ${ratio.toFixed(0)}% of modeled annual use (energy ratio, not savings)` : ""} · {(shadingDerate * 100).toFixed(1)}% beam shade at selected time.</p>
       </div>
@@ -178,14 +178,14 @@ export function InsightRail(props: InsightRailProps) {
           icon={TrendingUp}
         />
         <Kpi
-          label="Roof used"
+          label="Roof filled"
           value={coverage.toFixed(0)}
           unit="%"
           sub={`${coveredArea.toFixed(1)} of ${roofArea.toFixed(1)} m²`}
           icon={LayoutGrid}
         />
         <Kpi
-          label="Generation / use"
+          label="Sun vs home use"
           value={annualUsage > 0 ? ratio.toFixed(0) : "—"}
           unit="%"
           sub="Annual energy ratio, not savings"
