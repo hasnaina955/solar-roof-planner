@@ -87,7 +87,7 @@ function Block({ number, title, subtitle, icon, children, defaultOpen = true }: 
   return (
     <section className="panel-surface relative overflow-hidden rounded-[1.4rem]">
       <span className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-amber-400/50 via-primary/45 to-transparent" />
-      <details open={defaultOpen} className="group px-6 py-6 sm:px-7">
+      <details open={defaultOpen} className="group px-5 py-5">
         <summary className="flex cursor-pointer list-none items-center gap-3.5 rounded-xl outline-none select-none [&::-webkit-details-marker]:hidden">
           <span className="numeric rounded-lg bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary">{number}</span>
           <span className="min-w-0 flex-1">
@@ -97,7 +97,7 @@ function Block({ number, title, subtitle, icon, children, defaultOpen = true }: 
           <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-muted/70 text-muted-foreground">{icon}</span>
           <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-300 group-open:rotate-180" />
         </summary>
-        <div className="space-y-7 pt-7">{children}</div>
+        <div className="space-y-5 pt-5">{children}</div>
       </details>
     </section>
   );
@@ -111,7 +111,7 @@ export function Equipment({ config, onChange }: { config: SimulationConfig; onCh
   const siteId = INDIA_SITES.find((site) => site.latitude === config.location.latitude && site.longitude === config.location.longitude)?.id ?? "custom";
   const batteryEnabled = config.grid.mode !== "grid-tied";
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Block number="01" title="Location & connection" subtitle="City, supply type and outages" icon={<MapPin className="size-4" />}>
         <Choice label="City" hint="Schedules and solar use Indian Standard Time." value={siteId} onChange={(id) => { const site = INDIA_SITES.find((p) => p.id === id); if (site) onChange({ ...config, location: { name: site.name, latitude: site.latitude, longitude: site.longitude } }); }}>
           {INDIA_SITES.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
