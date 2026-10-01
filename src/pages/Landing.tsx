@@ -86,22 +86,22 @@ export default function Landing() {
           <div>
             <motion.p initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-card/80 py-1.5 pl-2 pr-3 shadow-sm">
               <span className="rounded-full bg-primary px-2 py-0.5 text-[9px] font-bold tracking-[0.1em] text-primary-foreground">INDIA</span>
-              <span className="eyebrow !text-[10px] text-foreground/80">Made for Indian homes · Simple words</span>
+              <span className="eyebrow !text-[10px] text-foreground/80">Built for Indian homes · Practical sizing</span>
             </motion.p>
             <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="display mt-6 text-[2.9rem] font-semibold leading-[0.98] sm:text-6xl lg:text-[4.6rem]">
-              Light cut? Know
+              Plan solar that
               <br />
-              More <span className="relative inline-block text-primary">sun-powered<svg viewBox="0 0 220 12" className="absolute -bottom-1 left-0 w-full" preserveAspectRatio="none"><path d="M3 9 C 60 3, 160 3, 217 8" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" opacity="0.35" /></svg></span>
+              holds up <span className="relative inline-block text-primary">through your day<svg viewBox="0 0 220 12" className="absolute -bottom-1 left-0 w-full" preserveAspectRatio="none"><path d="M3 9 C 60 3, 160 3, 217 8" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" opacity="0.35" /></svg></span>
               <br />
-              everyday life.
+              including power cuts.
             </motion.h1>
-            <p className="mt-6 max-w-lg text-[1.05rem] leading-relaxed text-muted-foreground">2 panels or full rooftop. Tell us your fans, lights, fridge, TV — we tell you in simple words what will run day and night, even when light goes.</p>
+            <p className="mt-6 max-w-lg text-[1.05rem] leading-relaxed text-muted-foreground">Two panels or a full rooftop. Configure panels, storage and appliance timings — see solar, battery and grid balance across each day.</p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Button asChild size="lg" className="h-12 rounded-full px-6 text-[0.95rem]"><Link to="/auth?returnTo=%2Fsimulator">Will my home run? <ArrowRight className="size-4" /></Link></Button>
-              <Button asChild size="lg" variant="outline" className="h-12 rounded-full px-6 text-[0.95rem]"><Link to="/auth?returnTo=%2Fdashboard"><BoxSelect className="size-4" />Draw my roof</Link></Button>
+              <Button asChild size="lg" className="h-12 rounded-full px-6 text-[0.95rem]"><Link to="/auth?returnTo=%2Fsimulator">Check my system <ArrowRight className="size-4" /></Link></Button>
+              <Button asChild size="lg" variant="outline" className="h-12 rounded-full px-6 text-[0.95rem]"><Link to="/auth?returnTo=%2Fdashboard"><BoxSelect className="size-4" />Plan my roof</Link></Button>
             </div>
             <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
-              {["Custom panels & Ah batteries", "IST appliance schedules", "No roof drawing required"].map((text) => (
+              {["Panel, battery & inverter sizing", "IST appliance schedules & outages", "Works without a roof drawing"].map((text) => (
                 <span key={text} className="flex items-center gap-1.5"><span className="grid size-4 place-items-center rounded-full bg-emerald-600/15 text-emerald-700"><Check className="size-2.5" /></span>{text}</span>
               ))}
             </div>

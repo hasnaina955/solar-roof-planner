@@ -1,21 +1,108 @@
 import { Battery, ChevronDown, MapPin, Minus, PanelTop, PlugZap, Plus } from "lucide-react";
 import { INDIA_SITES } from "@/lib/india";
 import { BATTERY_PRESETS, batteryBank, type SimulationConfig } from "@/lib/simulator";
+import { formatMinutes } from "@/lib/solar";
 import type { ReactNode } from "react";
+
+function toTime(minute: number) {
+  const m = ((Math.round(minute) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+function fromTime(v: string): number | null {
+  const [h, m] = v.split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  return h * 60 + m;
+}
 
 export function NumericField({ label, value, onChange, min = 0, max = 100000, step = 1, unit, hint, slider = false, sliderMin, sliderMax }: { label: string; value: number; onChange: (value: number) => void; min?: number; max?: number; step?: number; unit?: string; hint?: string; slider?: boolean; sliderMin?: number; sliderMax?: number }) {
   const clamp = (next: number) => onChange(Math.min(max, Math.max(min, step === 1 ? Math.round(next) : Math.round(next / step) * step)));
-  return <div className="block space-y-1.5 text-xs"><span className="font-medium text-foreground/80">{label}</span><div className="flex gap-1.5"><button type="button" aria-label={`Decrease ${label}`} onClick={() => clamp(value - step)} className="grid size-10 shrink-0 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"><Minus className="size-3.5" /></button><div className="relative min-w-0 flex-1"><input type="number" inputMode="decimal" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => { const next = Number(e.target.value); if (Number.isFinite(next)) clamp(next); }} className="numeric h-10 w-full rounded-lg border border-border bg-background px-2.5 pr-9 text-center text-sm font-semibold outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20" /><span className="pointer-events-none absolute right-2.5 top-3 text-[10px] text-muted-foreground">{unit}</span></div><button type="button" aria-label={`Increase ${label}`} onClick={() => clamp(value + step)} className="grid size-10 shrink-0 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"><Plus className="size-3.5" /></button></div>{slider && (sliderMax ?? max) > (sliderMin ?? min) && <input type="range" aria-label={`${label} slider`} min={sliderMin ?? min} max={sliderMax ?? max} step={step} value={Math.min(sliderMax ?? max, Math.max(sliderMin ?? min, value))} onChange={(e) => clamp(Number(e.target.value))} className="w-full" />}{hint && <span className="block text-[11px] leading-relaxed text-muted-foreground">{hint}</span>}</div>;
+  return (
+    <div className="block text-sm">
+      <span className="text-[13px] font-semibold tracking-tight text-foreground">{label}</span>
+      <div className="mt-2.5 flex gap-2">
+        <button type="button" aria-label={`Decrease ${label}`} onClick={() => clamp(value - step)} className="grid size-12 shrink-0 place-items-center rounded-2xl border border-border/80 bg-card text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:text-foreground hover:shadow-sm active:scale-95">
+          <Minus className="size-4" />
+        </button>
+        <div className="relative min-w-0 flex-1">
+          <input type="number" inputMode="decimal" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => { const next = Number(e.target.value); if (Number.isFinite(next)) clamp(next); }} className="numeric h-12 w-full rounded-2xl border border-border/80 bg-background px-3 pr-12 text-center text-base font-semibold tracking-tight shadow-[inset_0_1px_2px_oklch(0.3_0.05_58/0.05)] outline-none transition-all duration-200 focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/15" />
+          {unit && <span className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[11px] font-medium text-muted-foreground">{unit}</span>}
+        </div>
+        <button type="button" aria-label={`Increase ${label}`} onClick={() => clamp(value + step)} className="grid size-12 shrink-0 place-items-center rounded-2xl border border-border/80 bg-card text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:text-foreground hover:shadow-sm active:scale-95">
+          <Plus className="size-4" />
+        </button>
+      </div>
+      {slider && (sliderMax ?? max) > (sliderMin ?? min) && (
+        <input type="range" aria-label={`${label} slider`} min={sliderMin ?? min} max={sliderMax ?? max} step={step} value={Math.min(sliderMax ?? max, Math.max(sliderMin ?? min, value))} onChange={(e) => clamp(Number(e.target.value))} className="mt-3 w-full" />
+      )}
+      {hint && <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">{hint}</span>}
+    </div>
+  );
 }
-export function Choice({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: ReactNode }) {
-  return <label className="block space-y-1.5 text-xs"><span className="font-medium text-foreground/80">{label}</span><select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/30">{children}</select></label>;
+
+export function TimeField({ label, value, onChange, hint }: { label: string; value: number; onChange: (value: number) => void; hint?: string }) {
+  return (
+    <label className="block text-sm">
+      <span className="text-[13px] font-semibold tracking-tight text-foreground">{label}</span>
+      <input type="time" aria-label={label} value={toTime(value)} onChange={(e) => { const next = fromTime(e.target.value); if (next !== null) onChange(Math.min(1439, Math.max(0, next))); }} className="numeric mt-2.5 h-12 w-full rounded-2xl border border-border/80 bg-background px-3.5 text-[15px] font-semibold shadow-[inset_0_1px_2px_oklch(0.3_0.05_58/0.05)] outline-none transition-all duration-200 focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/15" />
+      {hint && <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">{hint}</span>}
+    </label>
+  );
 }
+
+export function Choice({ label, value, onChange, children, hint }: { label: string; value: string; onChange: (value: string) => void; children: ReactNode; hint?: string }) {
+  return (
+    <label className="block text-sm">
+      <span className="text-[13px] font-semibold tracking-tight text-foreground">{label}</span>
+      <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="mt-2.5 h-12 w-full cursor-pointer appearance-none rounded-2xl border border-border/80 bg-background px-4 text-[14px] font-medium shadow-[inset_0_1px_2px_oklch(0.3_0.05_58/0.05)] outline-none transition-all duration-200 focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/15">
+        {children}
+      </select>
+      {hint && <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">{hint}</span>}
+    </label>
+  );
+}
+
 export function Segmented<T extends string>({ label, value, onChange, options }: { label: string; value: T; onChange: (value: T) => void; options: { value: T; title: string; hint?: string }[] }) {
-  return <div role="radiogroup" aria-label={label} className="space-y-1.5 text-xs"><span className="font-medium text-foreground/80">{label}</span><div className="grid gap-1.5">{options.map((opt) => { const active = opt.value === value; return <button key={opt.value} type="button" role="radio" aria-checked={active} onClick={() => onChange(opt.value)} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99] ${active ? "border-primary/50 bg-primary/[0.07] shadow-[0_6px_18px_-10px_oklch(0.585_0.16_44/0.5)]" : "border-border bg-card hover:border-muted-foreground/40"}`}><span className={`grid size-4 shrink-0 place-items-center rounded-full border-2 ${active ? "border-primary" : "border-muted-foreground/40"}`}>{active && <span className="size-1.5 rounded-full bg-primary" />}</span><span className="min-w-0"><span className="block text-[0.8rem] font-semibold leading-tight">{opt.title}</span>{opt.hint && <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">{opt.hint}</span>}</span></button>; })}</div></div>;
+  return (
+    <div role="radiogroup" aria-label={label} className="text-sm">
+      <span className="text-[13px] font-semibold tracking-tight text-foreground">{label}</span>
+      <div className="mt-2.5 grid gap-2.5">
+        {options.map((opt) => {
+          const active = opt.value === value;
+          return (
+            <button key={opt.value} type="button" role="radio" aria-checked={active} onClick={() => onChange(opt.value)} className={`flex items-center gap-3.5 rounded-2xl border px-4 py-3.5 text-left transition-all duration-200 active:scale-[0.99] ${active ? "border-primary/60 bg-primary/[0.06] shadow-[0_10px_24px_-14px_oklch(0.585_0.16_44/0.55)]" : "border-border/80 bg-card hover:border-muted-foreground/40 hover:shadow-sm"}`}>
+              <span className={`grid size-[18px] shrink-0 place-items-center rounded-full border-2 transition-colors duration-200 ${active ? "border-primary" : "border-muted-foreground/35"}`}>{active && <span className="size-[7px] rounded-full bg-primary" />}</span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold tracking-tight">{opt.title}</span>
+                {opt.hint && <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{opt.hint}</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
-function Block({ number, title, icon, summary, children, defaultOpen = true }: { number: string; title: string; icon: ReactNode; summary?: string; children: ReactNode; defaultOpen?: boolean }) {
-  return <section className="panel-surface relative overflow-hidden"><span className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-amber-400/60 via-primary/50 to-transparent" /><details open={defaultOpen} className="group p-5"><summary className="flex cursor-pointer list-none items-center gap-2.5 select-none [&::-webkit-details-marker]:hidden"><span className="numeric rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{number}</span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{title}</span>{summary && <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{summary}</span>}</span><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">{icon}</span><ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" /></summary><div className="space-y-4 pt-5">{children}</div></details></section>;
+
+function Block({ number, title, subtitle, icon, children, defaultOpen = true }: { number: string; title: string; subtitle?: string; icon: ReactNode; summary?: string; children: ReactNode; defaultOpen?: boolean }) {
+  return (
+    <section className="panel-surface relative overflow-hidden rounded-[1.4rem]">
+      <span className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-amber-400/50 via-primary/45 to-transparent" />
+      <details open={defaultOpen} className="group px-6 py-6 sm:px-7">
+        <summary className="flex cursor-pointer list-none items-center gap-3.5 rounded-xl outline-none select-none [&::-webkit-details-marker]:hidden">
+          <span className="numeric rounded-lg bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary">{number}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[16px] font-semibold tracking-tight">{title}</span>
+            {subtitle && <span className="mt-1 block text-[13px] leading-snug text-muted-foreground">{subtitle}</span>}
+          </span>
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-muted/70 text-muted-foreground">{icon}</span>
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-300 group-open:rotate-180" />
+        </summary>
+        <div className="space-y-7 pt-7">{children}</div>
+      </details>
+    </section>
+  );
 }
+
 export function Equipment({ config, onChange }: { config: SimulationConfig; onChange: (config: SimulationConfig) => void }) {
   const s = config.solar, b = config.battery, i = config.inverter, bank = batteryBank(config);
   const solar = (patch: Partial<typeof s>) => onChange({ ...config, solar: { ...s, ...patch } });
@@ -23,33 +110,110 @@ export function Equipment({ config, onChange }: { config: SimulationConfig; onCh
   const inverter = (patch: Partial<typeof i>) => onChange({ ...config, inverter: { ...i, ...patch } });
   const siteId = INDIA_SITES.find((site) => site.latitude === config.location.latitude && site.longitude === config.location.longitude)?.id ?? "custom";
   const batteryEnabled = config.grid.mode !== "grid-tied";
-  const usableUnits = Math.round(bank.usableWh / 1000 * 10) / 10;
-  return <div className="space-y-4">
-    <Block number="01" title="Where do you live? Light situation?" icon={<MapPin className="size-4" />} summary={`${config.location.name} · ${config.grid.mode === "off-grid" ? "Only solar" : config.grid.mode === "hybrid" ? "Solar + govt light" : "Govt light + solar"} · ${config.days} days check`}>
-      <Choice label="Your city (time is Indian time)" value={siteId} onChange={(id) => { const site = INDIA_SITES.find((p) => p.id === id); if (site) onChange({ ...config, location: { name: site.name, latitude: site.latitude, longitude: site.longitude } }); }}>{INDIA_SITES.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}<option value="custom">Other place in India</option></Choice>
-      <Segmented label="What is your light connection?" value={config.grid.mode} onChange={(mode) => onChange({ ...config, grid: { ...config.grid, mode } })} options={[{ value: "off-grid", title: "Only solar + battery", hint: "No government light. Full backup needed." }, { value: "hybrid", title: "Solar + government light both", hint: "When govt light is there, home runs on it. Battery only for cuts." }, { value: "grid-tied", title: "Solar without battery", hint: "Light cut = no power. Battery settings will hide." }]} />
-      {config.grid.mode !== "off-grid" && <div className="space-y-3 border-t border-border pt-3"><NumericField label="Light bill rate" value={config.grid.tariff} max={50} step={0.1} unit="₹/unit" hint="Only the per-unit charge. Fixed charge not counted." onChange={(tariff) => onChange({ ...config, grid: { ...config.grid, tariff } })} /><label className="flex items-center gap-2 text-xs font-medium"><input type="checkbox" checked={config.grid.outages.length > 0} onChange={(e) => onChange({ ...config, grid: { ...config.grid, outages: e.target.checked ? [{ start: 1080, duration: 120 }] : [] } })} />Daily light cut happens?</label>{config.grid.outages.map((cut, index) => <div className="grid grid-cols-2 gap-3" key={index}><NumericField label={`Light goes at (mins after 12 night)`} value={cut.start} max={1439} unit="min" hint="Example: 6pm = 1080" onChange={(start) => onChange({ ...config, grid: { ...config.grid, outages: config.grid.outages.map((w, j) => j === index ? { ...w, start } : w) } })} /><NumericField label={`For how long?`} value={cut.duration} min={1} max={1440} unit="min" onChange={(duration) => onChange({ ...config, grid: { ...config.grid, outages: config.grid.outages.map((w, j) => j === index ? { ...w, duration } : w) } })} /></div>)}</div>}
-      <details className="text-xs"><summary className="cursor-pointer text-muted-foreground">More settings (days, exact location)</summary><div className="mt-3 grid grid-cols-2 gap-3"><NumericField label="Check for how many days?" value={config.days} min={1} max={7} unit="days" hint="3 days is good. Battery carries charge to next day." onChange={(days) => onChange({ ...config, days })} /><NumericField label="Start date (day number)" value={config.startDay} min={1} max={365} unit="day" hint="Change only if you know seasons matter." onChange={(startDay) => onChange({ ...config, startDay })} /></div></details>
-    </Block>
-    <Block number="02" title="How many solar panels?" icon={<PanelTop className="size-4" />} summary={`${s.count} panels × ${s.watts} W = ${(s.count * s.watts / 1000).toFixed(2)} kW total`}>
-      <div className="grid grid-cols-2 gap-3"><NumericField slider sliderMin={1} sliderMax={12} label="Number of panels" value={s.count} min={1} max={1000} hint="Most homes: 2 to 6 panels" onChange={(count) => solar({ count })} /><NumericField slider label="One panel size" value={s.watts} min={50} max={800} step={5} unit="W" hint="Shop bill says 220W / 550W etc." onChange={(watts) => solar({ watts })} /></div>
-      <div className="rounded-lg bg-primary/10 px-3 py-2 text-xs"><strong className="numeric">{(s.count * s.watts / 1000).toFixed(2)} kW</strong><span className="text-muted-foreground"> total panels — full sun gives near this, morning/evening gives less</span></div>
-      <details className="text-xs"><summary className="cursor-pointer font-medium text-foreground/80">Panel direction? For shopkeeper / mistri</summary><div className="mt-3 grid grid-cols-2 gap-3"><NumericField slider label="Tilt (slope)" value={s.tilt} max={70} unit="°" hint="25° is fine for most of India." onChange={(tilt) => solar({ tilt })} /><NumericField slider label="Facing (180 = south, best)" value={s.azimuth} max={360} step={5} unit="°" onChange={(azimuth) => solar({ azimuth })} /></div><p className="mt-2 text-[11px] text-muted-foreground">South facing gives most light. Leave as it is if you don&apos;t know.</p></details>
-      {batteryEnabled && <details className="text-xs"><summary className="cursor-pointer text-muted-foreground">Charge controller + sun settings (advanced)</summary><div className="mt-3 space-y-3"><NumericField label="Controller size" value={s.controllerAmps} max={1000} unit="A" hint={`At ${bank.volts}V battery, max solar is limited. Check MPPT box.`} onChange={(controllerAmps) => solar({ controllerAmps })} /><NumericField label="Sun brightness (0 cloudy – 1 full clear)" value={s.clearness} min={0} max={1} step={0.05} hint="0.7 is normal day. Not a weather forecast." onChange={(clearness) => solar({ clearness })} /><NumericField label="Outside heat" value={s.temperature} min={-10} max={55} unit="°C" onChange={(temperature) => solar({ temperature })} /></div></details>}
-    </Block>
-    <Block number="03" title="Which battery?" icon={<Battery className="size-4" />} summary={batteryEnabled ? `Backup ~ ${usableUnits} units usable` : "No battery in this mode"} defaultOpen={batteryEnabled}>
-      {!batteryEnabled ? <p className="text-xs text-muted-foreground">You chose solar without battery. If you want backup during light cuts, choose “Solar + government light both” above.</p> : <>
-        <Choice label="Battery type (as per shop bill)" value={b.chemistry} onChange={(chemistry) => { const preset = BATTERY_PRESETS[chemistry as keyof typeof BATTERY_PRESETS]; battery({ chemistry: chemistry as typeof b.chemistry, reserveSoc: preset.reserveSoc, chargeEfficiency: preset.chargeEfficiency, dischargeEfficiency: preset.dischargeEfficiency, ratedHours: preset.ratedHours, peukertExponent: preset.peukertExponent }); }}>{Object.entries(BATTERY_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}</Choice>
-        <div className="grid grid-cols-2 gap-3"><NumericField label="One battery size (Ah)" value={b.unitAh} min={20} max={500} step={5} unit="Ah" slider hint="Common: 150Ah or 200Ah tubular" onChange={(unitAh) => battery({ unitAh })} /><NumericField label="How many batteries?" value={b.series * b.parallel} min={1} max={16} unit="nos" hint="We manage series/parallel for you — just set total count here via advanced below if needed." onChange={(total) => { const t = Math.max(1, Math.round(total)); battery({ series: t, parallel: 1 }); }} /></div>
-        <div className="rounded-lg border border-border bg-muted/50 p-3"><p className="numeric text-sm font-semibold">Backup ≈ {usableUnits} units (kWh) usable</p><p className="mt-1 text-[11px] text-muted-foreground">Full box is {(bank.wh / 1000).toFixed(2)} units, but we keep reserve so battery does not die. {bank.units} battery nos.</p></div>
-        <details className="text-xs"><summary className="cursor-pointer font-medium text-foreground/80">Battery joining + reserve (for shopkeeper)</summary><div className="mt-3 grid grid-cols-2 gap-3"><NumericField label="One battery volts" value={b.unitVolts} min={2} max={60} step={0.1} unit="V" onChange={(unitVolts) => battery({ unitVolts })} /><NumericField slider label="Joined for volts (series)" value={b.series} min={1} max={16} onChange={(series) => battery({ series })} /><NumericField slider label="Extra rows (parallel)" value={b.parallel} min={1} max={16} onChange={(parallel) => battery({ parallel })} /><NumericField label="Keep reserve (do not use below)" value={b.reserveSoc} max={95} unit="%" hint="50% for tubular, 20% for lithium. Protects battery life." onChange={(reserveSoc) => battery({ reserveSoc })} /></div></details>
-      </>}
-    </Block>
-    <Block number="04" title="Which inverter / solar UPS?" icon={<PlugZap className="size-4" />} summary={`${i.va} VA ≈ ${(i.va * i.ratedPowerFactor).toFixed(0)} W together${Math.abs(bank.volts - i.dcVolts) > 0.01 && batteryEnabled ? " · ⚠ battery-inverter mismatch" : ""}`}>
-      {batteryEnabled && Math.abs(bank.volts - i.dcVolts) > 0.01 && <p role="alert" className="rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2 text-[11px] leading-relaxed">Battery is {bank.volts}V but inverter wants {i.dcVolts}V — nothing will run. Ask shopkeeper to match them.</p>}
-      <div className="grid grid-cols-2 gap-3"><NumericField slider label="Inverter size" value={i.va} min={200} max={10000} step={50} unit="VA" hint="900VA runs fans+lights+TV. 1.5 ton AC needs 3000VA+." onChange={(va) => inverter({ va })} /><NumericField label="Motor start power (surge)" value={i.surgeWatts} min={1} max={200000} unit="W" hint="Fridge/pump need extra at start. Leave as is if unsure." onChange={(surgeWatts) => inverter({ surgeWatts })} /></div>
-      <p className="numeric rounded-lg bg-muted/50 p-3 text-xs">Together you can run ≈ {(i.va * i.ratedPowerFactor).toFixed(0)} W at one time. Cross this = trip.</p>
-      <details className="text-xs"><summary className="cursor-pointer text-muted-foreground">Inverter fine settings (for electrician)</summary><div className="mt-3 grid grid-cols-2 gap-3"><NumericField label="Battery volts needed" value={i.dcVolts} min={2} max={1000} step={0.1} unit="V" onChange={(dcVolts) => inverter({ dcVolts })} /><NumericField label="W per VA (power factor)" value={i.ratedPowerFactor} min={0.2} max={1} step={0.05} onChange={(ratedPowerFactor) => inverter({ ratedPowerFactor })} /><NumericField label="Own use (idle)" value={i.idleWatts} max={500} unit="W" onChange={(idleWatts) => inverter({ idleWatts })} /><NumericField label="Efficiency" value={i.efficiency * 100} min={50} max={100} unit="%" step={0.1} onChange={(value) => inverter({ efficiency: value / 100 })} /></div></details>
-    </Block>
-  </div>;
+  return (
+    <div className="space-y-6">
+      <Block number="01" title="Location & connection" subtitle="City, supply type and outages" icon={<MapPin className="size-4" />}>
+        <Choice label="City" hint="Schedules and solar use Indian Standard Time." value={siteId} onChange={(id) => { const site = INDIA_SITES.find((p) => p.id === id); if (site) onChange({ ...config, location: { name: site.name, latitude: site.latitude, longitude: site.longitude } }); }}>
+          {INDIA_SITES.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+          <option value="custom">Custom location</option>
+        </Choice>
+        <Segmented label="System type" value={config.grid.mode} onChange={(mode) => onChange({ ...config, grid: { ...config.grid, mode } })} options={[
+          { value: "off-grid", title: "Off-grid", hint: "Solar and battery only. For sites without grid supply." },
+          { value: "hybrid", title: "Hybrid", hint: "Solar with grid backup. Storage covers power cuts." },
+          { value: "grid-tied", title: "Grid-tied", hint: "Solar without backup. No supply during cuts." },
+        ]} />
+        {config.grid.mode !== "off-grid" && (
+          <div className="space-y-5 rounded-2xl border border-border/70 bg-muted/25 p-5">
+            <NumericField label="Electricity tariff" value={config.grid.tariff} max={50} step={0.5} unit="₹/kWh" hint="Energy charge only. Fixed charges and taxes excluded." onChange={(tariff) => onChange({ ...config, grid: { ...config.grid, tariff } })} />
+            <label className="flex cursor-pointer items-center gap-3 text-sm font-medium">
+              <input type="checkbox" checked={config.grid.outages.length > 0} onChange={(e) => onChange({ ...config, grid: { ...config.grid, outages: e.target.checked ? [{ start: 1080, duration: 120 }] : [] } })} className="size-[18px] accent-[var(--color-primary)]" />
+              Include a daily power cut
+            </label>
+            {config.grid.outages.map((cut, index) => (
+              <div className="grid grid-cols-2 gap-4" key={index}>
+                <TimeField label="Cut starts" value={cut.start} hint={`Until ${formatMinutes(cut.start + cut.duration)}`} onChange={(start) => onChange({ ...config, grid: { ...config.grid, outages: config.grid.outages.map((w, j) => j === index ? { ...w, start } : w) } })} />
+                <NumericField label="Duration" value={cut.duration} min={15} max={1440} step={15} unit="min" onChange={(duration) => onChange({ ...config, grid: { ...config.grid, outages: config.grid.outages.map((w, j) => j === index ? { ...w, duration } : w) } })} />
+              </div>
+            ))}
+          </div>
+        )}
+        <details className="rounded-2xl bg-muted/25 px-5 py-4 text-sm">
+          <summary className="cursor-pointer text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground">Study period & coordinates</summary>
+          <div className="mt-5 grid grid-cols-2 gap-5">
+            <NumericField label="Duration" value={config.days} min={1} max={7} unit="days" hint="3 days shows overnight carry-over." onChange={(days) => onChange({ ...config, days })} />
+            <NumericField label="Start day" value={config.startDay} min={1} max={365} unit="day" hint="Day of year for sun position." onChange={(startDay) => onChange({ ...config, startDay })} />
+          </div>
+        </details>
+      </Block>
+
+      <Block number="02" title="Solar array" subtitle="Panels on the roof" icon={<PanelTop className="size-4" />}>
+        <div className="space-y-6">
+          <NumericField slider sliderMin={1} sliderMax={12} label="Number of panels" value={s.count} min={1} max={40} hint="Most homes use 2–6 panels." onChange={(count) => solar({ count })} />
+          <NumericField slider sliderMin={100} sliderMax={550} label="Panel rating" value={s.watts} min={50} max={800} step={5} unit="W" hint="Rating on the panel nameplate." onChange={(watts) => solar({ watts })} />
+        </div>
+        <div className="rounded-2xl border border-primary/15 bg-primary/[0.06] px-5 py-4 text-sm">
+          <strong className="numeric text-lg font-semibold tracking-tight">{(s.count * s.watts / 1000).toFixed(2)} kW</strong>
+          <span className="text-muted-foreground"> installed · output varies through the day</span>
+        </div>
+        <details className="rounded-2xl bg-muted/25 px-5 py-4 text-sm">
+          <summary className="cursor-pointer text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground">Orientation & sunlight</summary>
+          <div className="mt-5 space-y-6">
+            <NumericField slider label="Tilt from horizontal" value={s.tilt} max={70} unit="°" hint="Around 25° suits most of India." onChange={(tilt) => solar({ tilt })} />
+            <NumericField slider label="Facing direction" value={s.azimuth} max={360} step={5} unit="°" hint="180° faces south. 90° east, 270° west." onChange={(azimuth) => solar({ azimuth })} />
+            {batteryEnabled && (
+              <div className="space-y-6 border-t border-border/60 pt-5">
+                <NumericField label="Charge controller limit" value={s.controllerAmps} max={200} unit="A" hint={`At ${bank.volts} V the solar input is capped. Check the MPPT rating.`} onChange={(controllerAmps) => solar({ controllerAmps })} />
+                <NumericField label="Sky clarity" value={s.clearness} min={0.3} max={1} step={0.05} hint="0.7 is a typical clear day. An assumption, not a forecast." onChange={(clearness) => solar({ clearness })} />
+              </div>
+            )}
+          </div>
+        </details>
+      </Block>
+
+      <Block number="03" title="Battery bank" subtitle="Backup for evenings and power cuts" icon={<Battery className="size-4" />} defaultOpen={batteryEnabled}>
+        {!batteryEnabled ? (
+          <p className="rounded-2xl bg-muted/40 px-5 py-4 text-sm leading-relaxed text-muted-foreground">Grid-tied systems have no backup. Switch to hybrid or off-grid to configure storage.</p>
+        ) : (
+          <>
+            <Choice label="Battery type" value={b.chemistry} onChange={(chemistry) => { const preset = BATTERY_PRESETS[chemistry as keyof typeof BATTERY_PRESETS]; battery({ chemistry: chemistry as typeof b.chemistry, reserveSoc: preset.reserveSoc, chargeEfficiency: preset.chargeEfficiency, dischargeEfficiency: preset.dischargeEfficiency, ratedHours: preset.ratedHours, peukertExponent: preset.peukertExponent }); }}>
+              {Object.entries(BATTERY_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
+            </Choice>
+            <div className="space-y-6">
+              <NumericField slider sliderMin={40} sliderMax={220} label="Capacity per battery" value={b.unitAh} min={20} max={500} step={5} unit="Ah" hint="Common sizes: 150–200 Ah." onChange={(unitAh) => battery({ unitAh })} />
+              <NumericField slider sliderMin={1} sliderMax={8} label="Number of batteries" value={b.series * b.parallel} min={1} max={16} unit="nos" hint="Total units in the bank." onChange={(total) => { const t = Math.max(1, Math.round(total)); battery({ series: t, parallel: 1 }); }} />
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-5">
+              <p className="numeric text-base font-semibold tracking-tight">{(bank.wh / 1000).toFixed(2)} kWh total · {(bank.usableWh / 1000).toFixed(2)} kWh usable</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">Reserve is kept aside to protect battery life. {bank.units} {bank.units === 1 ? "battery" : "batteries"} at {bank.volts} V.</p>
+            </div>
+            <details className="rounded-2xl bg-muted/25 px-5 py-4 text-sm">
+              <summary className="cursor-pointer text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground">Wiring & reserve</summary>
+              <div className="mt-5 grid grid-cols-2 gap-5">
+                <NumericField label="Battery voltage" value={b.unitVolts} min={2} max={60} step={0.1} unit="V" onChange={(unitVolts) => battery({ unitVolts })} />
+                <NumericField slider label="In series" value={b.series} min={1} max={8} hint="Raises voltage." onChange={(series) => battery({ series })} />
+                <NumericField slider label="In parallel" value={b.parallel} min={1} max={8} hint="Raises capacity." onChange={(parallel) => battery({ parallel })} />
+                <NumericField label="Reserve floor" value={b.reserveSoc} max={95} unit="%" hint="50% lead-acid · 20% lithium." onChange={(reserveSoc) => battery({ reserveSoc })} />
+              </div>
+            </details>
+          </>
+        )}
+      </Block>
+
+      <Block number="04" title="Inverter" subtitle="How much can run at once" icon={<PlugZap className="size-4" />}>
+        {batteryEnabled && Math.abs(bank.volts - i.dcVolts) > 0.01 && (
+          <p role="alert" className="rounded-2xl border border-destructive/25 bg-destructive/[0.06] px-5 py-4 text-[13px] leading-relaxed">Battery bank is {bank.volts} V but the inverter expects {i.dcVolts} V. Adjust the series count or inverter voltage.</p>
+        )}
+        <NumericField slider sliderMin={500} sliderMax={5000} label="Inverter rating" value={i.va} min={200} max={10000} step={50} unit="VA" hint="900 VA covers fans, lights and TV." onChange={(va) => inverter({ va })} />
+        <NumericField label="Surge rating" value={i.surgeWatts} min={1} max={20000} unit="W" hint="Covers brief motor starting current." onChange={(surgeWatts) => inverter({ surgeWatts })} />
+        <p className="rounded-2xl bg-muted/40 px-5 py-4 text-sm">Continuous limit ≈ <strong className="numeric text-base">≈{(i.va * i.ratedPowerFactor).toFixed(0)} W</strong> <span className="text-muted-foreground">· check both W and VA on the datasheet</span></p>
+        <details className="rounded-2xl bg-muted/25 px-5 py-4 text-sm">
+          <summary className="cursor-pointer text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground">Electrical details</summary>
+          <div className="mt-5 grid grid-cols-2 gap-5">
+            <NumericField label="DC voltage" value={i.dcVolts} min={2} max={1000} step={0.1} unit="V" onChange={(dcVolts) => inverter({ dcVolts })} />
+            <NumericField label="Efficiency" value={i.efficiency * 100} min={50} max={100} unit="%" step={0.5} onChange={(value) => inverter({ efficiency: value / 100 })} />
+          </div>
+        </details>
+      </Block>
+    </div>
+  );
 }
