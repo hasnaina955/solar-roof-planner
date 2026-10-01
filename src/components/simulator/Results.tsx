@@ -64,15 +64,14 @@ export function Results({ config, result, selectedMinute, onSelect, advice, onAp
 
       {result.warnings.map((warning) => <p key={warning} role="alert" className="flex items-start gap-2.5 rounded-2xl border border-destructive/20 bg-destructive/5 px-5 py-3.5 text-[13px] leading-relaxed"><CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />{warning}</p>)}
 
-      <section className="panel-surface p-6 sm:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <details className="panel-surface group p-5 sm:p-6">
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
           <div className="max-w-lg">
-            <p className="eyebrow text-primary">Daily profile</p>
-            <h2 className="display mt-2 text-[1.5rem] font-semibold tracking-tight">Solar by day, demand into the night.</h2>
-            <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">Solar output, household load, battery charge and shortfall across the study period. All times IST.</p>
+            <p className="eyebrow text-muted-foreground">Detail · daily profile chart</p>
+            <h2 className="mt-1.5 text-[15px] font-semibold tracking-tight">Solar by day, demand into the night <span className="ml-1 text-xs font-normal text-muted-foreground">(expand for chart)</span></h2>
           </div>
           <span className={`rounded-full px-3.5 py-1.5 text-xs font-semibold ${result.unmetKwh > 0.01 ? "bg-destructive/10 text-destructive" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"}`}>{servedRatio === null ? "Awaiting loads" : `${servedRatio.toFixed(0)}% of demand met`}</span>
-        </div>
+        </summary>
         <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
           {[["#e07b2e", "Solar generation"], ["#33475e", "Household demand"], ["#1f8a70", "Battery charge"], ["#c0392b", "Unserved"]].map(([color, label]) => <span key={label} className="flex items-center gap-2"><span className="size-2 rounded-full" style={{ background: color }} />{label}</span>)}
         </div>
@@ -81,7 +80,7 @@ export function Results({ config, result, selectedMinute, onSelect, advice, onAp
             <button key={chip.label} type="button" onClick={() => onSelect(Math.min(chip.minute, config.days * 1440 - 5))} className="rounded-full border border-border/80 bg-background/60 px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-all duration-200 hover:border-primary/50 hover:text-foreground hover:shadow-sm">{chip.label}</button>
           ))}
         </div>
-        <div className="mt-4 h-64 w-full sm:h-72">
+        <div className="mt-4 h-52 w-full sm:h-60">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={chart} margin={{ top: 8, right: 0, left: -12, bottom: 0 }} onClick={(state: unknown) => { const hour = (state as { activeLabel?: number } | null)?.activeLabel; if (typeof hour === "number" && Number.isFinite(hour)) onSelect(Math.max(0, Math.min(config.days * 1440 - 5, Math.round(hour * 60 / 5) * 5))); }}>
               <defs><linearGradient id="solar-sim-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e07b2e" stopOpacity={0.32} /><stop offset="100%" stopColor="#e07b2e" stopOpacity={0.01} /></linearGradient></defs>
@@ -119,7 +118,7 @@ export function Results({ config, result, selectedMinute, onSelect, advice, onAp
             );
           })}
         </div>
-      </section>
+      </details>
 
       <div className="grid gap-5 md:grid-cols-2">
         <section className="panel-surface p-6">
