@@ -1,4 +1,5 @@
-import { Battery, ChevronDown, MapPin, Minus, PanelTop, PlugZap, Plus } from "lucide-react";
+import { Battery, ChevronDown, MapPin, PanelTop, PlugZap } from "lucide-react";
+import type { CSSProperties } from "react";
 import { INDIA_SITES } from "@/lib/india";
 import { BATTERY_PRESETS, batteryBank, type SimulationConfig } from "@/lib/simulator";
 import { formatMinutes } from "@/lib/solar";
@@ -14,27 +15,26 @@ function fromTime(v: string): number | null {
   return h * 60 + m;
 }
 
-export function NumericField({ label, value, onChange, min = 0, max = 100000, step = 1, unit, hint, slider = false, sliderMin, sliderMax }: { label: string; value: number; onChange: (value: number) => void; min?: number; max?: number; step?: number; unit?: string; hint?: string; slider?: boolean; sliderMin?: number; sliderMax?: number }) {
-  const clamp = (next: number) => onChange(Math.min(max, Math.max(min, step === 1 ? Math.round(next) : Math.round(next / step) * step)));
+export function NumericField({ label, value, onChange, min = 0, max = 100000, step = 1, unit, hint, slider = true, sliderMin, sliderMax }: { label: string; value: number; onChange: (value: number) => void; min?: number; max?: number; step?: number; unit?: string; hint?: string; slider?: boolean; sliderMin?: number; sliderMax?: number }) {
+  const clamp = (next: number) => onChange(Math.min(max, Math.max(min, step >= 1 ? Math.round(next) : Math.round(next / step) * step)));
+  const sMin = sliderMin ?? min;
+  const sMax = sliderMax ?? max;
+  const showSlider = slider && sMax > sMin;
+  const sliderValue = Math.min(sMax, Math.max(sMin, value));
+  const fill = sMax > sMin ? ((sliderValue - sMin) / (sMax - sMin)) * 100 : 50;
   return (
     <div className="block text-sm">
-      <span className="text-[13px] font-semibold tracking-tight text-foreground">{label}</span>
-      <div className="mt-2.5 flex gap-2">
-        <button type="button" aria-label={`Decrease ${label}`} onClick={() => clamp(value - step)} className="grid size-12 shrink-0 place-items-center rounded-2xl border border-border/80 bg-card text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:text-foreground hover:shadow-sm active:scale-95">
-          <Minus className="size-4" />
-        </button>
-        <div className="relative min-w-0 flex-1">
-          <input type="number" inputMode="decimal" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => { const next = Number(e.target.value); if (Number.isFinite(next)) clamp(next); }} className="numeric h-12 w-full rounded-2xl border border-border/80 bg-background px-3 pr-12 text-center text-base font-semibold tracking-tight shadow-[inset_0_1px_2px_oklch(0.3_0.05_58/0.05)] outline-none transition-all duration-200 focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/15" />
-          {unit && <span className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[11px] font-medium text-muted-foreground">{unit}</span>}
-        </div>
-        <button type="button" aria-label={`Increase ${label}`} onClick={() => clamp(value + step)} className="grid size-12 shrink-0 place-items-center rounded-2xl border border-border/80 bg-card text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:text-foreground hover:shadow-sm active:scale-95">
-          <Plus className="size-4" />
-        </button>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px] font-semibold tracking-tight text-foreground">{label}</span>
+        <span className="flex shrink-0 items-baseline gap-1 rounded-xl border border-border/70 bg-background px-2.5 py-1.5 shadow-[inset_0_1px_2px_oklch(0.3_0.05_58/0.06)] transition-colors duration-200 focus-within:border-primary">
+          <input type="number" inputMode="decimal" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => { const next = Number(e.target.value); if (Number.isFinite(next)) clamp(next); }} className="numeric w-16 bg-transparent text-right text-[15px] font-semibold tracking-tight outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+          {unit && <span className="text-[11px] font-medium text-muted-foreground">{unit}</span>}
+        </span>
       </div>
-      {slider && (sliderMax ?? max) > (sliderMin ?? min) && (
-        <input type="range" aria-label={`${label} slider`} min={sliderMin ?? min} max={sliderMax ?? max} step={step} value={Math.min(sliderMax ?? max, Math.max(sliderMin ?? min, value))} onChange={(e) => clamp(Number(e.target.value))} className="mt-3 w-full" />
+      {showSlider && (
+        <input type="range" aria-label={label} min={sMin} max={sMax} step={step} value={sliderValue} onChange={(e) => clamp(Number(e.target.value))} style={{ "--fill": `${fill}%` } as CSSProperties} className="mt-3 w-full" />
       )}
-      {hint && <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">{hint}</span>}
+      {hint && <span className="mt-1.5 block text-xs leading-relaxed text-muted-foreground">{hint}</span>}
     </div>
   );
 }
@@ -124,7 +124,7 @@ export function Equipment({ config, onChange }: { config: SimulationConfig; onCh
         ]} />
         {config.grid.mode !== "off-grid" && (
           <div className="space-y-5 rounded-2xl border border-border/70 bg-muted/25 p-5">
-            <NumericField label="Electricity tariff" value={config.grid.tariff} max={50} step={0.5} unit="₹/kWh" hint="Energy charge only. Fixed charges and taxes excluded." onChange={(tariff) => onChange({ ...config, grid: { ...config.grid, tariff } })} />
+            <NumericField label="Electricity tariff" value={config.grid.tariff} max={50} step={0.5} sliderMin={0} sliderMax={20} unit="₹/kWh" hint="Energy charge only. Fixed charges and taxes excluded." onChange={(tariff) => onChange({ ...config, grid: { ...config.grid, tariff } })} />
             <label className="flex cursor-pointer items-center gap-3 text-sm font-medium">
               <input type="checkbox" checked={config.grid.outages.length > 0} onChange={(e) => onChange({ ...config, grid: { ...config.grid, outages: e.target.checked ? [{ start: 1080, duration: 120 }] : [] } })} className="size-[18px] accent-[var(--color-primary)]" />
               Include a daily power cut
@@ -132,7 +132,7 @@ export function Equipment({ config, onChange }: { config: SimulationConfig; onCh
             {config.grid.outages.map((cut, index) => (
               <div className="grid grid-cols-2 gap-4" key={index}>
                 <TimeField label="Cut starts" value={cut.start} hint={`Until ${formatMinutes(cut.start + cut.duration)}`} onChange={(start) => onChange({ ...config, grid: { ...config.grid, outages: config.grid.outages.map((w, j) => j === index ? { ...w, start } : w) } })} />
-                <NumericField label="Duration" value={cut.duration} min={15} max={1440} step={15} unit="min" onChange={(duration) => onChange({ ...config, grid: { ...config.grid, outages: config.grid.outages.map((w, j) => j === index ? { ...w, duration } : w) } })} />
+                <NumericField label="Duration" value={cut.duration} min={15} max={1440} step={15} sliderMin={15} sliderMax={360} unit="min" onChange={(duration) => onChange({ ...config, grid: { ...config.grid, outages: config.grid.outages.map((w, j) => j === index ? { ...w, duration } : w) } })} />
               </div>
             ))}
           </div>
@@ -162,7 +162,7 @@ export function Equipment({ config, onChange }: { config: SimulationConfig; onCh
             <NumericField slider label="Facing direction" value={s.azimuth} max={360} step={5} unit="°" hint="180° faces south. 90° east, 270° west." onChange={(azimuth) => solar({ azimuth })} />
             {batteryEnabled && (
               <div className="space-y-6 border-t border-border/60 pt-5">
-                <NumericField label="Charge controller limit" value={s.controllerAmps} max={200} unit="A" hint={`At ${bank.volts} V the solar input is capped. Check the MPPT rating.`} onChange={(controllerAmps) => solar({ controllerAmps })} />
+                <NumericField label="Charge controller limit" value={s.controllerAmps} max={200} sliderMin={10} sliderMax={100} unit="A" hint={`At ${bank.volts} V the solar input is capped. Check the MPPT rating.`} onChange={(controllerAmps) => solar({ controllerAmps })} />
                 <NumericField label="Sky clarity" value={s.clearness} min={0.3} max={1} step={0.05} hint="0.7 is a typical clear day. An assumption, not a forecast." onChange={(clearness) => solar({ clearness })} />
               </div>
             )}
@@ -189,10 +189,10 @@ export function Equipment({ config, onChange }: { config: SimulationConfig; onCh
             <details className="rounded-2xl bg-muted/25 px-5 py-4 text-sm">
               <summary className="cursor-pointer text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground">Wiring & reserve</summary>
               <div className="mt-5 grid grid-cols-2 gap-5">
-                <NumericField label="Battery voltage" value={b.unitVolts} min={2} max={60} step={0.1} unit="V" onChange={(unitVolts) => battery({ unitVolts })} />
+                <NumericField label="Battery voltage" value={b.unitVolts} min={2} max={60} step={1} sliderMin={6} sliderMax={48} unit="V" onChange={(unitVolts) => battery({ unitVolts })} />
                 <NumericField slider label="In series" value={b.series} min={1} max={8} hint="Raises voltage." onChange={(series) => battery({ series })} />
                 <NumericField slider label="In parallel" value={b.parallel} min={1} max={8} hint="Raises capacity." onChange={(parallel) => battery({ parallel })} />
-                <NumericField label="Reserve floor" value={b.reserveSoc} max={95} unit="%" hint="50% lead-acid · 20% lithium." onChange={(reserveSoc) => battery({ reserveSoc })} />
+                <NumericField label="Reserve floor" value={b.reserveSoc} max={95} sliderMin={10} sliderMax={80} unit="%" hint="50% lead-acid · 20% lithium." onChange={(reserveSoc) => battery({ reserveSoc })} />
               </div>
             </details>
           </>
@@ -204,12 +204,12 @@ export function Equipment({ config, onChange }: { config: SimulationConfig; onCh
           <p role="alert" className="rounded-2xl border border-destructive/25 bg-destructive/[0.06] px-5 py-4 text-[13px] leading-relaxed">Battery bank is {bank.volts} V but the inverter expects {i.dcVolts} V. Adjust the series count or inverter voltage.</p>
         )}
         <NumericField slider sliderMin={500} sliderMax={5000} label="Inverter rating" value={i.va} min={200} max={10000} step={50} unit="VA" hint="900 VA covers fans, lights and TV." onChange={(va) => inverter({ va })} />
-        <NumericField label="Surge rating" value={i.surgeWatts} min={1} max={20000} unit="W" hint="Covers brief motor starting current." onChange={(surgeWatts) => inverter({ surgeWatts })} />
+        <NumericField label="Surge rating" value={i.surgeWatts} min={1} max={20000} step={10} sliderMin={500} sliderMax={6000} unit="W" hint="Covers brief motor starting current." onChange={(surgeWatts) => inverter({ surgeWatts })} />
         <p className="rounded-2xl bg-muted/40 px-5 py-4 text-sm">Continuous limit ≈ <strong className="numeric text-base">≈{(i.va * i.ratedPowerFactor).toFixed(0)} W</strong> <span className="text-muted-foreground">· check both W and VA on the datasheet</span></p>
         <details className="rounded-2xl bg-muted/25 px-5 py-4 text-sm">
           <summary className="cursor-pointer text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground">Electrical details</summary>
           <div className="mt-5 grid grid-cols-2 gap-5">
-            <NumericField label="DC voltage" value={i.dcVolts} min={2} max={1000} step={0.1} unit="V" onChange={(dcVolts) => inverter({ dcVolts })} />
+            <NumericField label="DC voltage" value={i.dcVolts} min={2} max={1000} step={1} sliderMin={12} sliderMax={96} unit="V" onChange={(dcVolts) => inverter({ dcVolts })} />
             <NumericField label="Efficiency" value={i.efficiency * 100} min={50} max={100} unit="%" step={0.5} onChange={(value) => inverter({ efficiency: value / 100 })} />
           </div>
         </details>
