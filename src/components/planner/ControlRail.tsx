@@ -53,18 +53,17 @@ interface ControlRailProps {
   annualKwh: number;
 }
 
-/** Groups the rail into scannable blocks instead of one long control column. */
-function Section({ title, caption }: { title: string; caption?: string }) {
+/** Numbered step headers so the long rail reads as 3 guided steps. */
+function Section({ step, title, caption }: { step: string; title: string; caption?: string }) {
   return (
-    <div className="space-y-1 border-t border-border/70 pt-4">
-      <h3 className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-        {title}
-      </h3>
-      {caption ? (
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {caption}
-        </p>
-      ) : null}
+    <div className="flex gap-3 border-t border-border/70 pt-4">
+      <span className="numeric grid size-6 shrink-0 place-items-center rounded-lg bg-primary/10 text-[11px] font-bold text-primary">{step}</span>
+      <div className="space-y-1">
+        <h3 className="text-[0.8rem] font-semibold tracking-tight">{title}</h3>
+        {caption ? (
+          <p className="text-xs leading-relaxed text-muted-foreground">{caption}</p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -250,6 +249,7 @@ export function ControlRail(props: ControlRailProps) {
 
       <div className="space-y-4">
         <Section
+          step="1"
           title="The roof"
           caption="Trace the outline on the model, then set how it faces the sun."
         />
@@ -292,6 +292,7 @@ export function ControlRail(props: ControlRailProps) {
 
       <div className="space-y-4">
         <Section
+          step="2"
           title="The array"
           caption="Everything here feeds the solar model directly. Change any value and the layout, shadows and yield update instantly."
         />
@@ -438,7 +439,7 @@ export function ControlRail(props: ControlRailProps) {
       </div>
 
       <div className="space-y-4">
-        <Section title="Display" caption="How the model is drawn." />
+        <Section step="3" title="Display" caption="How the model is drawn — never affects yield." />
 
         <div className="space-y-3">
           <label className="flex cursor-pointer items-center justify-between gap-3 text-sm">

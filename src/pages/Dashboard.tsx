@@ -817,29 +817,10 @@ function Planner({ ownerId }: { ownerId: string }) {
                 className="pointer-events-auto flex flex-wrap items-center gap-1.5"
               >
                 {mode !== "draw" ? (
-                  <>
-                    <Button
-                      size="sm"
-                      className="cursor-pointer"
-                      onClick={() => {
-                        setDrawPoints([]);
-                        setMode("draw");
-                      }}
-                    >
-                      <Pencil className="size-4" />
-                      Trace my roof
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="cursor-pointer"
-                      onClick={() => {
-                        setMode("obstacle");
-                      }}
-                    >
-                      <BoxSelect className="size-4" />
-                      Add vent
-                    </Button>
+                  <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-border bg-card/90 p-1.5 shadow-sm backdrop-blur">
+                    <div role="tablist" aria-label="Edit mode" className="flex items-center gap-0.5 rounded-xl bg-muted/70 p-0.5">
+                      {(["orbit", "draw", "obstacle"] as const).map((m) => <button key={m} type="button" role="tab" aria-selected={mode === m} title={m === "orbit" ? "Orbit / inspect" : m === "draw" ? "Trace a new roof outline" : "Place vents"} onClick={() => { if (m === "draw") setDrawPoints([]); setMode(m); }} className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${mode === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{m === "orbit" ? <ScanEye className="size-3.5" /> : m === "draw" ? <Pencil className="size-3.5" /> : <BoxSelect className="size-3.5" />}{m === "orbit" ? "Explore" : m === "draw" ? "Trace roof" : `Vent${obstacles.length > 0 ? ` (${obstacles.length})` : ""}`}</button>)}
+                    </div>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -862,7 +843,7 @@ function Planner({ ownerId }: { ownerId: string }) {
                       <RotateCcw className="size-4" />
                       Sample roof
                     </Button>
-                  </>
+                  </div>
                 ) : (
                   <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card/90 p-1.5 shadow-sm backdrop-blur">
                     <span className="px-2 text-xs font-medium text-muted-foreground">
@@ -1017,7 +998,7 @@ function Planner({ ownerId }: { ownerId: string }) {
       </div>
 
       {/* Full input parity on mobile; the same rail renders in a bottom sheet. */}
-      <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-card/80 px-4 py-3 lg:hidden"><p className="numeric text-xs">{panelCount} panels · {(capacityW / 1000).toFixed(2)} kWp</p><Sheet><SheetTrigger asChild><Button size="sm" variant="outline">All roof controls</Button></SheetTrigger><SheetContent side="bottom" className="h-[85vh] gap-0 rounded-t-2xl"><SheetHeader><SheetTitle>Roof & array inputs</SheetTitle><SheetDescription>All locations, modules, mounting and layout controls.</SheetDescription></SheetHeader><div className="min-h-0 flex-1">{controlRail}</div></SheetContent></Sheet></div>
+      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-card/90 px-4 py-3 backdrop-blur lg:hidden"><p className="numeric min-w-0 flex-1 truncate text-xs">{panelCount} panels · {(capacityW / 1000).toFixed(2)} kWp · {Math.round(energy.annualKwh).toLocaleString()} kWh/yr</p><Sheet><SheetTrigger asChild><Button size="sm" variant="outline">Setup</Button></SheetTrigger><SheetContent side="bottom" className="h-[85vh] gap-0 rounded-t-2xl"><SheetHeader><SheetTitle>Roof & array inputs</SheetTitle><SheetDescription>All locations, modules, mounting and layout controls.</SheetDescription></SheetHeader><div className="min-h-0 flex-1 overflow-y-auto">{controlRail}</div></SheetContent></Sheet><Sheet><SheetTrigger asChild><Button size="sm">Results</Button></SheetTrigger><SheetContent side="bottom" className="h-[85vh] gap-0 rounded-t-2xl"><SheetHeader><SheetTitle>Output & layout maths</SheetTitle><SheetDescription>Yearly yield, daily curve and spacing reference.</SheetDescription></SheetHeader><div className="min-h-0 flex-1 overflow-y-auto"><InsightRail panelCount={panelCount} capacityKw={capacityW / 1000} roofArea={roofArea} coveredArea={coveredArea} annualKwh={energy.annualKwh} specificYield={energy.specificYield} shadingDerate={1 - derate} monthlyKwh={energy.monthlyKwh} dayCurve={dayCurve} currentHour={minutes / 60} liveAcWatts={live.ac} poa={live.poa} sunAltitude={sun.altitude} sunAzimuth={sun.azimuth} maxPanels={maxPanels} rowPitch={layout.rowPitch} designAltitude={layout.designAltitude} mounting={mounting} moduleTilt={layout.moduleTilt} moduleAlongSlope={layout.moduleAlongSlope} annualUsage={usage.annualKwh} /></div></SheetContent></Sheet></div>
 
       {isSaving && (
         <span className="pointer-events-none fixed bottom-4 left-4 hidden items-center gap-2 rounded-lg border border-border bg-card/90 px-3 py-2 text-xs shadow-sm backdrop-blur lg:flex">

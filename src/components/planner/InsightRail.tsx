@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import {
   Area,
@@ -146,8 +147,15 @@ export function InsightRail(props: InsightRailProps) {
   }));
   const peak = dayCurve.reduce((max, point) => Math.max(max, point.kwh), 0);
 
+  const [chartTab, setChartTab] = useState<"day" | "year">("day");
   return (
     <div className="flex h-full flex-col gap-5 overflow-y-auto p-5">
+      <div className="panel-surface relative overflow-hidden p-4">
+        <span className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-amber-400/70 via-primary/60 to-transparent" />
+        <p className="eyebrow text-primary">Verdict</p>
+        <p className="display mt-1 text-[1.35rem] font-semibold leading-tight">{capacityKw.toFixed(2)} kWp · {Math.round(annualKwh).toLocaleString()} kWh/yr</p>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{panelCount} of {maxPanels} modules fit · {specificYield.toFixed(0)} kWh per kWp{annualUsage > 0 ? ` · covers ${ratio.toFixed(0)}% of modeled annual use (energy ratio, not savings)` : ""} · {(shadingDerate * 100).toFixed(1)}% beam shade at selected time.</p>
+      </div>
       <div className="grid grid-cols-2 gap-2.5">
         <Kpi
           label="Capacity"
@@ -220,9 +228,8 @@ export function InsightRail(props: InsightRailProps) {
       </Card>
 
       <div>
-        <SectionTitle hint={`${dayTotal.toFixed(1)} kWh on the selected day`}>
-          Selected day’s estimate
-        </SectionTitle>
+        <div className="mb-3 flex items-center justify-between gap-2"><SectionTitle hint={chartTab === "day" ? `${dayTotal.toFixed(1)} kWh on the selected day` : "Illustrative monthly presets"}>{chartTab === "day" ? "Selected day’s estimate" : "Monthly output"}</SectionTitle><div role="tablist" aria-label="Output charts" className="flex shrink-0 gap-0.5 rounded-full border border-border bg-muted/60 p-0.5">{(["day", "year"] as const).map((t) => <button key={t} type="button" role="tab" aria-selected={chartTab === t} onClick={() => setChartTab(t)} className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${chartTab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{t === "day" ? "Day" : "Year"}</button>)}</div></div>
+        {chartTab === "day" ? <>
         <div className="h-40 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
@@ -282,10 +289,8 @@ export function InsightRail(props: InsightRailProps) {
         <p className="numeric mt-1 text-xs text-muted-foreground">
           Peak {peak.toFixed(2)} kWh per half hour
         </p>
-      </div>
-
-      <div>
-        <SectionTitle hint="Modelled from illustrative monthly climate presets">Monthly output</SectionTitle>
+        </>
+        : <>
         <div className="h-36 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={monthlyData} margin={{ top: 6, right: 4, bottom: 0, left: -24 }}>
@@ -316,6 +321,7 @@ export function InsightRail(props: InsightRailProps) {
             </BarChart>
           </ResponsiveContainer>
         </div>
+        </>}
       </div>
 
       <div>
