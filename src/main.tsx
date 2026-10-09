@@ -110,6 +110,12 @@ function RouteSyncer() {
 }
 
 
+// Base subpath when served under one (e.g. GitHub Pages project site
+// "/solar-roof-planner/"). Defaults to "/" so local dev and the hosted
+// platform are unaffected. Imported from Vite so the same value drives
+// asset URLs (vite.config.ts base) and route matching here.
+const basename = import.meta.env.VITE_BASE_PATH ?? "/";
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RootErrorBoundary>
@@ -118,7 +124,7 @@ createRoot(document.getElementById("root")!).render(
       </ToolbarErrorBoundary>
       <MotionConfig reducedMotion="user">
       <ConvexAuthProvider client={convex}>
-        <BrowserRouter>
+        <BrowserRouter basename={basename}>
           <RouteSyncer />
           <Suspense fallback={<RouteLoading />}>
             <Routes>

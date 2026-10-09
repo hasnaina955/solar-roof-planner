@@ -6,6 +6,11 @@ import { defineConfig } from "vite";
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Base path for the built site. Defaults to "/" for local dev and the
+  // hosted platform. GitHub Pages project sites set VITE_BASE_PATH to
+  // "/solar-roof-planner/" (see .github/workflows/deploy.yml); asset URLs
+  // are emitted relative to it so the build works under the subpath.
+  base: process.env.VITE_BASE_PATH ?? "/",
   plugins: [react(), vlyPlugin(), tailwindcss()],
   resolve: {
     alias: {

@@ -1,0 +1,99 @@
+# Deploy — Convex backend + frontend build on every push to main
+#
+# Helio ("solar-roof-planner") deploys in two pieces:
+#   1. BACKEND — Convex functions in src/convex/ are pushed with
+#      `convex deploy`. The production deployment URL never changes,
+#      so the frontend keeps working across deploys.
+#   2. FRONTEND — `bun run build` (tsc -b && vite build) produces dist/.
+#      VITE_CONVEX_URL is baked in AT BUILD TIME, so it must be the
+#      *production* Convex URL. dist/ is uploaded as an artifact and a
+#      second job publishes it to the static host (step TBD — see below).
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   CONVEX_DEPLOY_KEY — Convex *production* deploy key
+#       (Convex dashboard → production project → Settings → Deploy Keys).
+#   VITE_CONVEX_URL   — the production deployment URL, e.g.
+#       https://<name>-<hash>.convex.cloud
+#       (copy from the Convex dashboard AFTER the first `convex deploy`).
+#
+# Server-side env vars (set in the CONVEX DASHBOARD, not here,
+# Settings → Environment Variables on the production deployment):
+#   CONVEX_SITE_URL   — the public frontend origin, e.g. https://helio.example.com
+#                       (auth callbacks are built from this)
+#   JWT_PRIVATE_KEY / JWKS — Convex Auth key pair (see CONTRIBUTING.md)
+#   VLY_EMAIL_API_KEY — OTP email gateway key (see src/convex/auth/emailOtp.ts)
+#   VLY_APP_NAME      — shown in the OTP email ("a freebuff.com application" fallback)
+#
+# First-deploy order (once, from your machine):
+#   1. bunx convex deploy            # creates the production deployment
+#   2. copy the production URL from the dashboard → VITE_CONVEX_URL secret
+#   3. set the server-side vars above in the Convex dashboard
+#   4. push to main and let this workflow take over from there
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  convex:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - run: bun install --frozen-lockfile
+
+      - name: Deploy Convex functions + build frontend
+        run: bunx convex deploy --cmd 'bun run build'
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
+          # Base path for GitHub Pages project site:
+          # https://hasnaina955.github.io/solar-roof-planner/
+          VITE_BASE_PATH: /solar-roof-planner/
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+          retention-days: 7
+
+  # TODO(host): publish dist/ to the static host.
+  # Options: Vercel / Netlify / Cloudflare Pages / GitHub Pages.
+  # (Waiting on host choice — then this job gets the publish step.)
+  pages:
+    needs: convex
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+
+      # SPA fallback: serve index.html on unknown paths so /simulator,
+      # /dashboard deep links resolve under the Pages project subpath.
+      - name: Add SPA fallback
+        run: cp dist/index.html dist/404.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

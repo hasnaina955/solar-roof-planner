@@ -16,6 +16,16 @@ export const emailOtp = Email({
     return generateRandomString(random, alphabet, 6);
   },
   async sendVerificationRequest({ identifier: email, token }) {
+    // Per-deployment secret — set it in the Convex dashboard
+    // (Settings → Environment Variables) or the hosted platform's Keys UI.
+    // It must never be hardcoded: this repo is public.
+    const apiKey = process.env.VLY_EMAIL_API_KEY;
+    if (!apiKey) {
+      throw new Error(
+        "VLY_EMAIL_API_KEY is not set on this Convex deployment. " +
+          "Add it in the Convex dashboard (Settings → Environment Variables).",
+      );
+    }
     try {
       await axios.post(
         "https://auth.freebuff.app/send_otp",
@@ -26,7 +36,7 @@ export const emailOtp = Email({
         },
         {
           headers: {
-            "x-api-key": "fb_email_2crN1hqIArZP2bEfvjp5Qik4",
+            "x-api-key": apiKey,
           },
         },
       );

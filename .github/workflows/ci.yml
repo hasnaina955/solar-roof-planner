@@ -1,0 +1,51 @@
+# CI — verify every push and PR
+#
+# What runs (mirrors CONTRIBUTING.md "Verification"):
+#   1. bun install
+#   2. bun test (pure-logic suites, node:test — no Convex deployment needed)
+#   3. eslint
+#   4. convex dev --once against a throwaway DEV deployment
+#      (runs codegen so src/convex/_generated exists for the typecheck)
+#   5. tsc -b --noEmit (full app + functions typecheck)
+#
+# Required repo secret:
+#   CONVEX_DEV_DEPLOY_KEY — a Convex *development* deploy key
+#   (Convex dashboard → the dev project → Settings → Deploy Keys → Generate).
+#   Never commit the deployment URL or the key itself.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - run: bun install --frozen-lockfile
+
+      - name: Unit tests (pure logic, node:test)
+        run: bun test scripts/trust.test.ts scripts/simulator.test.ts
+
+      - name: Lint
+        run: bunx eslint .
+
+      - name: Sync Convex dev deployment + codegen
+        run: bunx convex dev --once
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEV_DEPLOY_KEY }}
+
+      - name: Typecheck
+        run: bunx tsc -b --noEmit
