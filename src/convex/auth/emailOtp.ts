@@ -11,10 +11,8 @@ import { RandomReader, generateRandomString } from "@oslojs/crypto/random";
 // onboarding@resend.dev — replace RESEND_FROM with your verified domain
 // address before production use.
 //
-// VLY_EMAIL_API_KEY is the legacy freebuff.com OTP gateway. It stays as a
-// fallback so any deployment that still has that key keeps working, but new
-// deployments should use Resend: the freebuff account is suspended and its
-// gateway is not guaranteed to keep serving this project.
+// VLY_EMAIL_API_KEY is a legacy OTP gateway fallback. New deployments
+// should use Resend instead.
 export const emailOtp = Email({
   id: "email-otp",
   maxAge: 60 * 15, // 15 minutes
@@ -53,7 +51,7 @@ export const emailOtp = Email({
         {
           to: email,
           otp: token,
-          appName: process.env.VLY_APP_NAME || "a freebuff.com application",
+          appName: process.env.VLY_APP_NAME || "Helio",
         },
         {
           headers: {

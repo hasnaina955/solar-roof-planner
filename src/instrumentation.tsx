@@ -1,5 +1,5 @@
 import { Dialog } from "@radix-ui/react-dialog";
-import { AlertTriangle, ChevronDown, ExternalLink } from "lucide-react";
+import { AlertTriangle, ChevronDown } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -62,32 +62,10 @@ function normalizeError(value: unknown): GenericError {
   };
 }
 
-async function reportErrorToVly(errorData: {
-  error: string;
-  stackTrace?: string;
-  filename?: string;
-  lineno?: number;
-  colno?: number;
-}) {
-  const appId = import.meta.env.VITE_VLY_APP_ID;
-  const monitoringUrl = import.meta.env.VITE_VLY_MONITORING_URL;
-
-  if (!appId || !monitoringUrl) {
-    return;
-  }
-
-  try {
-    await fetch(monitoringUrl, {
-      method: "POST",
-      body: JSON.stringify({
-        ...errorData,
-        url: window.location.href,
-        projectSemanticIdentifier: appId,
-      }),
-    });
-  } catch (error) {
-    console.error("Failed to report error to Vly:", error);
-  }
+async function reportError(): Promise<void> {
+  // No-op. Error telemetry used to post to the hosted platform's monitoring
+  // endpoint; outside that environment there is nothing to report to and the
+  // dialog below still shows the full details locally.
 }
 
 function ErrorDialog({
@@ -159,17 +137,8 @@ function ErrorDialog({
 
         <DialogFooter className="gap-3 sm:items-center">
           <span className="text-xs text-zinc-500">
-            Your error details are also available in chat.
+            Your error details are shown above.
           </span>
-          <a
-            href={`https://freebuff.com/project/${import.meta.env.VITE_VLY_APP_ID}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <Button className="bg-zinc-100 text-zinc-900 hover:bg-white">
-              <ExternalLink className="h-4 w-4" /> Open editor
-            </Button>
-          </a>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -199,16 +168,11 @@ class ErrorBoundary extends React.Component<
     };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    const normalizedError = normalizeError(error);
+  componentDidCatch(_error: Error, info: React.ErrorInfo) {
+    const normalizedError = normalizeError(_error);
     const componentStack = info.componentStack?.trim();
 
-    reportErrorToVly({
-      error: normalizedError.error,
-      stackTrace: [normalizedError.stack, componentStack]
-        .filter(Boolean)
-        .join("\n\n"),
-    });
+    void reportError();
 
     this.setState((state) => ({
       hasError: true,
@@ -257,13 +221,7 @@ export function InstrumentationProvider({
         };
         setError(capturedError);
 
-        await reportErrorToVly({
-          error: normalizedError.error,
-          stackTrace: normalizedError.stack,
-          filename: event.filename,
-          lineno: event.lineno,
-          colno: event.colno,
-        });
+        await reportError();
       } catch (error) {
         console.error("Error in handleError:", error);
       }
@@ -272,13 +230,10 @@ export function InstrumentationProvider({
     const handleRejection = async (event: PromiseRejectionEvent) => {
       try {
         const normalizedError = normalizeError(event.reason);
-        console.error("[Freebuff runtime error]", normalizedError.error);
+        console.error("[Helio runtime error]", normalizedError.error);
         setError(normalizedError);
 
-        await reportErrorToVly({
-          error: normalizedError.error,
-          stackTrace: normalizedError.stack,
-        });
+        await reportError();
       } catch (error) {
         console.error("Error in handleRejection:", error);
       }

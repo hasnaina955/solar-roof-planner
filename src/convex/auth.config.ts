@@ -1,10 +1,9 @@
 import type { AuthConfig } from "convex/server";
 
 // Convex Auth issues this project's own sign-in JWTs (email OTP / anonymous
-// in src/convex/auth.ts). The freebuff.com federated entry was removed with
-// the Freebuff exit: that issuer is no longer reachable or trusted, and
-// project JWTs must never validate against an external account's keys.
-// Re-add a customJwt entry here only for an identity provider you own.
+// in src/convex/auth.ts). Project JWTs must never validate against an
+// external account's keys. Re-add a customJwt entry here only for an
+// identity provider you own.
 export default {
   providers: [
     // Standard Convex Auth provider for this project's own sign-in ("Get
